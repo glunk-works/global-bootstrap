@@ -20,6 +20,7 @@ Because this repository manages the state storage for the entire organization, i
    ```
 
    *(If using standard IAM keys, ensure your profile is active via `aws configure` or `export AWS_PROFILE=your-profile`).*
+
 3. Initialize the OpenTofu directory:
 
    ```bash
