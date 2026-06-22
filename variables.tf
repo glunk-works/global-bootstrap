@@ -4,6 +4,11 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "aws_profile" {
+  description = "The SSO profile to use for the bootstrap infrastructure."
+  type        = string
+  default     = "admin-sso"
+}
 variable "bootstrap_bucket_name" {
   description = "The globally unique name for the S3 state bucket."
   type        = string

@@ -13,16 +13,22 @@ This repository contains the foundational OpenTofu infrastructure for the Glunk 
 Because this repository manages the state storage for the entire organization, it does not use a remote backend. It should be executed from your local development environment.
 
 1. Clone the repository.
-2. Ensure you are authenticated with AWS CLI.
+2. Authenticate your local terminal with AWS. If you are using AWS Identity Center (SSO), refresh your credentials by running:
+
+   ```bash
+   aws sso login
+   ```
+
+   *(If using standard IAM keys, ensure your profile is active via `aws configure`).*
 3. Initialize the OpenTofu directory:
 
-    ```bash
+   ```bash
    tofu init
    ```
 
 4. Review the plan and apply, providing the required variables:
 
-    ```bash
+   ```bash
    tofu apply -var="bootstrap_bucket_name=glunk-works-tofu-state-12345" -var="github_organization=glunk-works"
    ```
 
