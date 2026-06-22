@@ -8,9 +8,9 @@ This repository contains the foundational OpenTofu infrastructure for the Glunk 
 * **AWS DynamoDB:** A serverless lock table to prevent concurrent state modifications.
 * **AWS IAM & OIDC:** A trust relationship allowing GitHub Actions to assume least-privilege, dynamically generated roles for each repository in the organization.
 
-## Usage Instructions
+## Usage Instructions: Phase 1 (Local Bootstrap)
 
-Because this repository manages the state storage for the entire organization, it does not use a remote backend. It should be executed from your local development environment.
+Because this repository manages the state storage for the entire organization, it does not start with a remote backend. It must be executed from your local development environment first.
 
 1. Clone the repository.
 2. Authenticate your local terminal with AWS. If you are using AWS Identity Center (SSO), refresh your credentials by running:
@@ -19,7 +19,7 @@ Because this repository manages the state storage for the entire organization, i
    aws sso login
    ```
 
-   *(If using standard IAM keys, ensure your profile is active via `aws configure`).*
+   *(If using standard IAM keys, ensure your profile is active via `aws configure` or `export AWS_PROFILE=your-profile`).*
 3. Initialize the OpenTofu directory:
 
    ```bash
@@ -33,6 +33,34 @@ Because this repository manages the state storage for the entire organization, i
    ```
 
 **Important:** The S3 bucket name must be globally unique across all of AWS.
+
+## Usage Instructions: Phase 2 (State Migration)
+
+Once the initial `tofu apply` is successful, your state file is sitting locally on your machine. You must migrate it to the newly created S3 bucket to ensure it is backed up and encrypted.
+
+1. In the root of this repository, create a new file named `backend.tf`.
+2. Add the following configuration, replacing the bucket name with the exact name you provided in Phase 1:
+
+   ```hcl
+   terraform {
+     backend "s3" {
+       bucket         = "glunk-works-tofu-state-12345" # Update this!
+       key            = "bootstrap/global-bootstrap.tfstate"
+       region         = "us-east-1"
+       dynamodb_table = "global-tofu-lock"
+       encrypt        = true
+     }
+   }
+   ```
+
+3. Run the initialization command again to trigger the migration:
+
+   ```bash
+   tofu init
+   ```
+
+4. OpenTofu will detect the new backend and ask: *"Do you want to copy existing state to the new backend?"* Type `yes`.
+5. Once complete, you may safely delete the local `terraform.tfstate` file, as the cloud is now the source of truth.
 
 ## Adding a New Project
 
