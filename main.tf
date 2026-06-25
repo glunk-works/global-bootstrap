@@ -1,5 +1,5 @@
 provider "aws" {
-  region = var.aws_region
+  region  = var.aws_region
   profile = var.aws_profile
 }
 
@@ -14,7 +14,7 @@ resource "aws_s3_bucket" "state_bucket" {
 }
 
 resource "aws_s3_bucket_versioning" "state_versioning" {
-  bucket = aws_s3_bucket.state_bucket.bucket
+  bucket = aws_s3_bucket.state_bucket.id
   versioning_configuration {
     status = "Enabled"
   }
@@ -44,14 +44,46 @@ resource "aws_dynamodb_table" "state_locks" {
 }
 
 # ---------------------------------------------------------
-# 3. Secure Identity Federation (GitHub OIDC Provider)
+# 3. Centralized Vulnerability Findings Storage
 # ---------------------------------------------------------
-data "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
+resource "aws_kms_key" "findings_key" {
+  description             = "KMS Key for Bug Bounty Findings S3 Bucket"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+}
+
+resource "aws_s3_bucket" "findings_bucket" {
+  bucket        = var.findings_bucket_name
+  force_destroy = false
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "findings_encryption" {
+  bucket = aws_s3_bucket.findings_bucket.id
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.findings_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "findings_privacy" {
+  bucket                  = aws_s3_bucket.findings_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 # ---------------------------------------------------------
-# 4. Dynamic CI/CD Roles (Generated 1 per project)
+# 4. Secure Identity Federation (GitHub OIDC Provider)
+# ---------------------------------------------------------
+data "aws_iam_openid_connect_provider" "github" {
+  url = "https://token.actions.githubusercontent.com"
+}
+
+# ---------------------------------------------------------
+# 5. Dynamic CI/CD Roles (Generated 1 per project)
 # ---------------------------------------------------------
 resource "aws_iam_role" "github_actions_role" {
   for_each = var.projects
@@ -81,56 +113,37 @@ resource "aws_iam_role" "github_actions_role" {
 }
 
 # ---------------------------------------------------------
-# 5. Dynamic Prefix Policies (Generated 1 per project)
+# 6. Dynamic State Access Policy (Inline - State Scope Only)
 # ---------------------------------------------------------
-resource "aws_iam_role_policy" "pipeline_restricted_policy" {
+resource "aws_iam_role_policy" "pipeline_state_policy" {
   for_each = var.projects
 
-  name = "${each.key}-pipeline-policy"
+  name = "${each.key}-state-policy"
   role = aws_iam_role.github_actions_role[each.key].id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "AllowListBucketOfSpecificPrefix"
-        Effect = "Allow"
-        Action = "s3:ListBucket"
+        Sid      = "AllowListBucketOfSpecificPrefix"
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
         Resource = aws_s3_bucket.state_bucket.arn
         Condition = {
           StringLike = { "s3:prefix" : ["${each.key}/*"] }
         }
       },
       {
-        Sid    = "AllowReadWriteToSpecificPrefix"
-        Effect = "Allow"
-        Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Sid      = "AllowReadWriteToSpecificPrefix"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
         Resource = "${aws_s3_bucket.state_bucket.arn}/${each.key}/*"
       },
       {
-        Sid    = "AllowDynamoDBStateLocking"
-        Effect = "Allow"
-        Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
+        Sid      = "AllowDynamoDBStateLocking"
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
         Resource = aws_dynamodb_table.state_locks.arn
-      },
-      {
-        Sid    = "AllowWorkloadManagement"
-        Effect = "Allow"
-        Action = concat(
-          [
-            "iam:PassRole",
-            "iam:CreateRole",
-            "iam:DeleteRole",
-            "iam:PutRolePolicy",
-            "iam:DeleteRolePolicy",
-            "iam:GetRole",
-            "iam:GetRolePolicy",
-            "iam:AttachRolePolicy",
-            "iam:DetachRolePolicy"
-          ],
-          each.value.allowed_actions
-        )
-        Resource = "*"
       }
     ]
   })

@@ -9,9 +9,16 @@ variable "aws_profile" {
   type        = string
   default     = "admin-sso"
 }
+
 variable "bootstrap_bucket_name" {
   description = "The globally unique name for the S3 state bucket."
   type        = string
+}
+
+variable "findings_bucket_name" {
+  description = "The globally unique name for the centralized bug bounty findings bucket."
+  type        = string
+  default     = "glunk-works-bounty-findings-archive"
 }
 
 variable "github_organization" {
@@ -20,45 +27,14 @@ variable "github_organization" {
 }
 
 variable "projects" {
-  description = "Map of all projects and their strictly permitted AWS actions."
+  description = "Map of all projects integrating with the centralized state."
   type = map(object({
-    repo_name       = string
-    allowed_actions = list(string)
+    repo_name = string
   }))
   default = {
-    "tri-loop" = {
-      repo_name       = "tri-loop-dev"
-      allowed_actions = [
-        "ecs:*",
-        "ecr:*",
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "rds:*"
-      ]
-    }
-    "bedrock-rag" = {
-      repo_name       = "bedrock-serverless-rag"
-      allowed_actions = [
-        "lambda:*",
-        "apigateway:*",
-        "bedrock:InvokeModel",
-        "bedrock:InvokeModelWithResponseStream"
-      ]
-    }
-    "bounty-infra" = {
-      repo_name       = "bounty-infra"
-      allowed_actions = [
-        "ec2:*",
-        "vpc:*",
-        "route53:*"
-      ]
-    }
-    "resume-optimizer" = {
-      repo_name       = "resume-optimizer"
-      allowed_actions = [
-        "lambda:*",
-        "s3:*"
-      ]
-    }
+    "tri-loop-dev"         = { repo_name = "tri-loop-dev" }
+    "bedrock-serverless-rag"      = { repo_name = "bedrock-serverless-rag" }
+    "bounty-infra"     = { repo_name = "bounty-infra" }
+    "resume-optimizer" = { repo_name = "resume-optimizer" }
   }
 }
