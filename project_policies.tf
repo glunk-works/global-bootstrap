@@ -49,7 +49,7 @@ resource "aws_iam_policy" "bounty_infra_policy" {
           "iam:GetRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy",
           "iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy",
           "iam:GetPolicyVersion", "iam:ListPolicyVersions", "iam:ListInstanceProfilesForRole",
-          "iam:ListRolePolicies"
+          "iam:ListRolePolicies", "iam:ListAttachedRolePolicies"
         ]
         Resource = "*"
       }
