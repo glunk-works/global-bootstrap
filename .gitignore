@@ -26,5 +26,5 @@ terraform.rc
 ehthumbs.db
 Thumbs.db
 
-,env
+.env
 *.env/
