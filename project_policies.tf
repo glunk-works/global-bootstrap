@@ -18,10 +18,10 @@ resource "aws_iam_policy" "bounty_infra_policy" {
         Action = [
           # Network Provisioning
           "ec2:CreateVpc", "ec2:DeleteVpc", "ec2:DescribeVpcs", "ec2:ModifyVpcAttribute",
-          "ec2:CreateSubnet", "ec2:DeleteSubnet", "ec2:DescribeSubnets", "ec2:ModifySubnetAttribute",
-          "ec2:CreateInternetGateway", "ec2:AttachInternetGateway", "ec2:DetachInternetGateway", "ec2:DeleteInternetGateway", "ec2:DescribeInternetGateways",
-          "ec2:CreateRouteTable", "ec2:DeleteRouteTable", "ec2:DescribeRouteTables", "ec2:CreateRoute",
-          "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable",
+          "ec2:DescribeVpcAttribute", "ec2:CreateSubnet", "ec2:DeleteSubnet", "ec2:DescribeSubnets", "ec2:ModifySubnetAttribute",
+          "ec2:CreateInternetGateway", "ec2:AttachInternetGateway", "ec2:DetachInternetGateway", "ec2:DeleteInternetGateway", 
+          "ec2:DescribeInternetGateways", "ec2:CreateRouteTable", "ec2:DeleteRouteTable", "ec2:DescribeRouteTables",
+          "ec2:CreateRoute", "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable",
           "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup", "ec2:DescribeSecurityGroups",
           "ec2:AuthorizeSecurityGroupEgress", "ec2:RevokeSecurityGroupEgress",
           "ec2:CreateTags", "ec2:DeleteTags",
@@ -48,7 +48,8 @@ resource "aws_iam_policy" "bounty_infra_policy" {
           "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRole",
           "iam:GetRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy",
           "iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy",
-          "iam:GetPolicyVersion", "iam:ListPolicyVersions", "iam:ListInstanceProfilesForRole"
+          "iam:GetPolicyVersion", "iam:ListPolicyVersions", "iam:ListInstanceProfilesForRole",
+          "iam:ListRolePolicies"
         ]
         Resource = "*"
       }
