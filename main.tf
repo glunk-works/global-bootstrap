@@ -122,6 +122,11 @@ resource "aws_iam_role" "github_actions_role" {
   })
 }
 
+# Ensure the ECS Service Linked Role exists for Fargate ENI provisioning
+resource "aws_iam_service_linked_role" "ecs" {
+  aws_service_name = "ecs.amazonaws.com"
+}
+
 # ---------------------------------------------------------
 # 6. Dynamic State Access Policy (Inline - State Scope Only)
 # ---------------------------------------------------------

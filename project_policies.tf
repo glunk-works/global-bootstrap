@@ -52,6 +52,32 @@ resource "aws_iam_policy" "bounty_infra_policy" {
           "iam:ListRolePolicies", "iam:ListAttachedRolePolicies"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "AllowECSTaskExecutionAndMonitoring"
+        Effect = "Allow"
+        Action = [
+          "ecs:RunTask",
+          "ecs:DescribeTasks",
+          "ecs:StopTask"
+        ]
+        # Scoped down to your cluster and task definitions for security
+        Resource = [
+          "arn:aws:ecs:*:*:task-definition/bounty-scanner-task:*",
+          "arn:aws:ecs:*:*:task-definition/bounty-scanner-task",
+          "arn:aws:ecs:*:*:cluster/bounty-scanner-cluster",
+          "arn:aws:ecs:*:*:task/bounty-scanner-cluster/*"
+        ]
+      },
+      {
+        Sid    = "AllowPassingExecutionAndTaskRoles"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        # The actions role must be able to pass these roles to the ECS service
+        Resource = [
+          "arn:aws:iam::*:role/*-ecs-execution-role",
+          "arn:aws:iam::*:role/*-ecs-task-role"
+        ]
       }
     ]
   })
