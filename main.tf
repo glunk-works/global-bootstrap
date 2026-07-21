@@ -104,7 +104,17 @@ resource "aws_iam_role" "github_actions_role" {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:${var.github_organization}/${each.value.repo_name}:ref:refs/heads/main"
+            # A job that references a GitHub Environment does NOT present the
+            # branch subject: the environment filter takes precedence, so the
+            # subject becomes `...:environment:<name>` and this role would
+            # reject it. A project gating a deploy behind an Environment must
+            # therefore list that subject in `extra_oidc_subjects` — an
+            # addition, not a replacement, because sibling workflows on the same
+            # role (image build, scan dispatch) still present the branch subject.
+            "token.actions.githubusercontent.com:sub" = concat(
+              ["repo:${var.github_organization}/${each.value.repo_name}:ref:refs/heads/main"],
+              [for s in each.value.extra_oidc_subjects : "repo:${var.github_organization}/${each.value.repo_name}:${s}"]
+            )
           }
         }
       }

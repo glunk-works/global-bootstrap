@@ -34,11 +34,21 @@ variable "projects" {
     # (see plan_roles.tf). Off by default: a project without plan-on-PR should
     # not have an extra assumable identity sitting around.
     plan_role = optional(bool, false)
+
+    # Extra OIDC subject suffixes the apply role will also trust, appended to
+    # "repo:<org>/<repo>:". Needed because a job referencing a GitHub
+    # Environment presents `environment:<name>` INSTEAD OF the branch subject.
+    extra_oidc_subjects = optional(list(string), [])
   }))
   default = {
     "tri-loop-dev"           = { repo_name = "tri-loop-dev" }
     "bedrock-serverless-rag" = { repo_name = "bedrock-serverless-rag" }
-    "bounty-infra"           = { repo_name = "bounty-infra", plan_role = true }
     "resume-optimizer"       = { repo_name = "resume-optimizer" }
+    "bounty-infra" = {
+      repo_name = "bounty-infra"
+      plan_role = true
+      # deploy-infra.yml's apply job runs `environment: production`.
+      extra_oidc_subjects = ["environment:production"]
+    }
   }
 }
