@@ -30,11 +30,15 @@ variable "projects" {
   description = "Map of all projects integrating with the centralized state."
   type = map(object({
     repo_name = string
+    # Opt in to a second, READ-ONLY role for `tofu plan` on pull requests
+    # (see plan_roles.tf). Off by default: a project without plan-on-PR should
+    # not have an extra assumable identity sitting around.
+    plan_role = optional(bool, false)
   }))
   default = {
-    "tri-loop-dev"         = { repo_name = "tri-loop-dev" }
-    "bedrock-serverless-rag"      = { repo_name = "bedrock-serverless-rag" }
-    "bounty-infra"     = { repo_name = "bounty-infra" }
-    "resume-optimizer" = { repo_name = "resume-optimizer" }
+    "tri-loop-dev"           = { repo_name = "tri-loop-dev" }
+    "bedrock-serverless-rag" = { repo_name = "bedrock-serverless-rag" }
+    "bounty-infra"           = { repo_name = "bounty-infra", plan_role = true }
+    "resume-optimizer"       = { repo_name = "resume-optimizer" }
   }
 }

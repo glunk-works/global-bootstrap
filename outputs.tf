@@ -13,6 +13,11 @@ output "github_actions_role_arns" {
   value       = { for k, v in aws_iam_role.github_actions_role : k => v.arn }
 }
 
+output "github_actions_plan_role_arns" {
+  description = "Map of read-only PR-time `tofu plan` role ARNs, for projects with plan_role = true. Feed into the consuming repo's AWS_PLAN_ROLE_ARN."
+  value       = { for k, v in aws_iam_role.github_actions_plan_role : k => v.arn }
+}
+
 output "findings_bucket_name" {
   description = "The name of the centralized S3 findings archive."
   value       = aws_s3_bucket.findings_bucket.bucket
