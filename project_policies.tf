@@ -78,6 +78,18 @@ resource "aws_iam_policy" "bounty_infra_policy" {
           "arn:aws:iam::*:role/*-ecs-execution-role",
           "arn:aws:iam::*:role/*-ecs-task-role"
         ]
+      },
+      {
+        # SE (bounty-infra sprints/SE_egress_migration, BI-D5/SE-MG2):
+        # run-scan.yml chains into bounty-scanner-s3-writer for the per-scan
+        # Vultr VM's ONLY credential -- scoped further at each assume-role
+        # call by an inline session policy. Not a widened trust condition:
+        # this grants the ALREADY-TRUSTED bounty-infra pipeline identity
+        # permission to assume ONE specific, narrower role, nothing more.
+        Sid      = "AllowChainingIntoScannerWriter"
+        Effect   = "Allow"
+        Action   = "sts:AssumeRole"
+        Resource = aws_iam_role.bounty_scanner_s3_writer.arn
       }
     ]
   })
