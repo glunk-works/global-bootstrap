@@ -24,6 +24,15 @@ resource "aws_iam_policy" "bounty_infra_policy" {
           "ec2:CreateRoute", "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable",
           "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup", "ec2:DescribeSecurityGroups",
           "ec2:AuthorizeSecurityGroupEgress", "ec2:RevokeSecurityGroupEgress",
+          # bounty-infra SE Phase 2: tearing down the VPC/subnet/SG for the
+          # first time (nothing had ever deleted them before) surfaced that
+          # the AWS provider calls DescribeNetworkInterfaces as a safety
+          # check before it will delete a security group or subnet, to
+          # detach/force-delete any ENI still attached first -- a call this
+          # policy never needed for CREATE. DeleteNetworkInterface travels
+          # with it so that check can actually clear a stray ENI, not just
+          # observe one.
+          "ec2:DescribeNetworkInterfaces", "ec2:DeleteNetworkInterface",
           "ec2:CreateTags", "ec2:DeleteTags",
 
           # ECS / Fargate Compute
