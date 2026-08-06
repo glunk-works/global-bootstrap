@@ -41,9 +41,26 @@ variable "projects" {
     extra_oidc_subjects = optional(list(string), [])
   }))
   default = {
-    "tri-loop-dev"           = { repo_name = "tri-loop-dev" }
-    "bedrock-serverless-rag" = { repo_name = "bedrock-serverless-rag" }
-    "resume-optimizer"       = { repo_name = "resume-optimizer" }
+    "tri-loop-dev"     = { repo_name = "tri-loop-dev" }
+    "resume-optimizer" = { repo_name = "resume-optimizer" }
+
+    # NOTE: "bedrock-serverless-rag" is deliberately ABSENT -- do not re-add it here.
+    #
+    # That repo is about to transfer into this organization. Its entry generated a CI role
+    # trusting `repo:glunk-works/bedrock-serverless-rag:...`, which matches nothing while the
+    # repo still lives under a personal namespace -- so the role sits inert. The moment the
+    # transfer completes it becomes assumable, and the policy attached to it granted
+    # `iam:CreateRole`/`PutRolePolicy`/`AttachRolePolicy`/`PassRole` on `Resource = "*"` in
+    # the account that also holds the bounty-findings archive. A repository-settings change,
+    # with no IaC diff anywhere, would have created a new path to account administrator.
+    #
+    # Removing the entry closes that off entirely, and costs nothing: the repo authenticates
+    # through its own deployment role today and does not use this one.
+    #
+    # It comes back -- WITH a permissions boundary, an IAM role-path scope, and a findings
+    # `Deny` covering `kms:` as well as `s3:` -- when that repo's identity sprint runs. The
+    # corrected specification is written down there; re-adding a bare entry in the meantime
+    # reopens exactly what this deletion closed.
     "bounty-infra" = {
       repo_name = "bounty-infra"
       plan_role = true
