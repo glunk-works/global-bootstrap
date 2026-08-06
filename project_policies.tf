@@ -19,7 +19,7 @@ resource "aws_iam_policy" "bounty_infra_policy" {
           # Network Provisioning
           "ec2:CreateVpc", "ec2:DeleteVpc", "ec2:DescribeVpcs", "ec2:ModifyVpcAttribute",
           "ec2:DescribeVpcAttribute", "ec2:CreateSubnet", "ec2:DeleteSubnet", "ec2:DescribeSubnets", "ec2:ModifySubnetAttribute",
-          "ec2:CreateInternetGateway", "ec2:AttachInternetGateway", "ec2:DetachInternetGateway", "ec2:DeleteInternetGateway", 
+          "ec2:CreateInternetGateway", "ec2:AttachInternetGateway", "ec2:DetachInternetGateway", "ec2:DeleteInternetGateway",
           "ec2:DescribeInternetGateways", "ec2:CreateRouteTable", "ec2:DeleteRouteTable", "ec2:DescribeRouteTables",
           "ec2:CreateRoute", "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable",
           "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup", "ec2:DescribeSecurityGroups",
@@ -41,15 +41,15 @@ resource "aws_iam_policy" "bounty_infra_policy" {
           "ecs:RunTask",
 
           # ECR (Container Registry & Image Pushes)
-          "ecr:CreateRepository", "ecr:DeleteRepository", "ecr:DescribeRepositories", 
+          "ecr:CreateRepository", "ecr:DeleteRepository", "ecr:DescribeRepositories",
           "ecr:ListTagsForResource", "ecr:PutImageTagMutability",
-          "ecr:GetAuthorizationToken", "ecr:BatchCheckLayerAvailability", 
-          "ecr:GetDownloadUrlForLayer", "ecr:GetRepositoryPolicy", "ecr:ListImages", 
-          "ecr:DescribeImages", "ecr:BatchGetImage", "ecr:InitiateLayerUpload", 
+          "ecr:GetAuthorizationToken", "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer", "ecr:GetRepositoryPolicy", "ecr:ListImages",
+          "ecr:DescribeImages", "ecr:BatchGetImage", "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage",
 
           # CloudWatch Logs
-          "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups", 
+          "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups",
           "logs:ListTagsForResource", "logs:PutRetentionPolicy",
 
           # IAM Policy Management (Required to construct container Execution/Task roles)
@@ -124,7 +124,7 @@ resource "aws_iam_policy" "tri_loop_policy" {
           "ecs:*", "ecr:*", "ssm:GetParameter", "ssm:GetParameters", "rds:*",
           # Standard IAM workload management capabilities
           "iam:PassRole", "iam:CreateRole", "iam:DeleteRole", "iam:PutRolePolicy",
-          "iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy", 
+          "iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy",
           "iam:AttachRolePolicy", "iam:DetachRolePolicy"
         ]
         Resource = "*"
@@ -139,33 +139,34 @@ resource "aws_iam_role_policy_attachment" "tri_loop_attach" {
 }
 
 # ---------------------------------------------------------
-# 3. Bedrock Serverless RAG
+# 3. Bedrock Serverless RAG -- REMOVED, deliberately. Do not re-add here.
 # ---------------------------------------------------------
-resource "aws_iam_policy" "bedrock_rag_policy" {
-  name        = "glunk-works-bedrock-rag-workload"
-  description = "Permissions for the Bedrock RAG AI pipeline"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "lambda:*", "apigateway:*", "bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream",
-          # Standard IAM workload management capabilities
-          "iam:PassRole", "iam:CreateRole", "iam:DeleteRole", "iam:PutRolePolicy",
-          "iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy", 
-          "iam:AttachRolePolicy", "iam:DetachRolePolicy"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "bedrock_rag_attach" {
-  role       = aws_iam_role.github_actions_role["bedrock-serverless-rag"].name
-  policy_arn = aws_iam_policy.bedrock_rag_policy.arn
-}
+# `aws_iam_policy.bedrock_rag_policy` and its attachment lived here, and the matching entry
+# in `var.projects` generated the role they applied to. All three are gone. Two reasons, and
+# the second is the one that made it urgent:
+#
+#   1. The policy did not describe that workload. It granted `lambda:*` and `apigateway:*` --
+#      the permission set of a Lambda + API Gateway application. That project provisions an
+#      S3 bucket, an OpenSearch Serverless collection, and a Bedrock Knowledge Base. It
+#      granted none of what it needed and a great deal of what it did not.
+#
+#   2. It was a dormant escalation path waiting on a settings change. The role's trust subject
+#      names this organization, so today it matches nothing -- that repo is still under a
+#      personal namespace. The instant it transfers in, the role becomes assumable, and this
+#      policy granted `iam:CreateRole`, `iam:PutRolePolicy`, `iam:AttachRolePolicy` and
+#      `iam:PassRole` on `Resource = "*"`, in the account that also holds the bounty-findings
+#      archive. No pull request, no IaC diff, no review surface -- just an owner clicking
+#      Transfer.
+#
+# It returns when that repo's identity sprint runs, rebuilt against what the module actually
+# declares and constrained by a permissions boundary plus an IAM role-path scope. The
+# corrected specification lives in that repo's sprint plan; a bare re-add reopens (2).
+#
+# The section numbering below is left alone on purpose: renumbering would churn every
+# following block and hide this one-block diff.
+#
+# The same `Resource = "*"` IAM grant is present in the sibling policies below. Deleting
+# this one does NOT fix the pattern -- see the linked issue.
 
 # ---------------------------------------------------------
 # 4. Resume Optimizer
@@ -182,7 +183,7 @@ resource "aws_iam_policy" "resume_optimizer_policy" {
           "lambda:*", "s3:*",
           # Standard IAM workload management capabilities
           "iam:PassRole", "iam:CreateRole", "iam:DeleteRole", "iam:PutRolePolicy",
-          "iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy", 
+          "iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy",
           "iam:AttachRolePolicy", "iam:DetachRolePolicy"
         ]
         Resource = "*"
