@@ -112,10 +112,13 @@ resource "aws_iam_role" "github_actions_role" {
         }
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
+          # StringEquals, not StringLike (F2): in IAM StringLike, '*' matches ':' too, so an
+          # extra_oidc_subjects entry containing a wildcard would glob silently past this
+          # role's federated principal. Every rendered subject is wildcard-free today, which
+          # is what makes this behaviour-preserving -- it removes the mechanism rather than
+          # relying on the values staying clean.
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          }
-          StringLike = {
             # A job that references a GitHub Environment does NOT present the
             # branch subject: the environment filter takes precedence, so the
             # subject becomes `...:environment:<name>` and this role would

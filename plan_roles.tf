@@ -38,11 +38,18 @@ resource "aws_iam_role" "github_actions_plan_role" {
         }
         Action = "sts:AssumeRoleWithWebIdentity"
         Condition = {
-          # StringEquals, not StringLike: the pull_request subject is an exact,
+          # StringEquals, not StringLike: every rendered subject below is an exact,
           # wildcard-free string, so there is no reason to accept a pattern.
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-            "token.actions.githubusercontent.com:sub" = "${local.subject_prefix[each.key]}:pull_request"
+            # A one-element list where a bare string used to stand. IAM treats a
+            # condition value as a set, so the two are equivalent -- this exists so a
+            # project can also trust a push-triggered plan job (extra_plan_oidc_subjects,
+            # F56 gap a), e.g. "ref:refs/heads/main" for a push-triggered tofu-plan-main.
+            "token.actions.githubusercontent.com:sub" = concat(
+              ["${local.subject_prefix[each.key]}:pull_request"],
+              [for s in each.value.extra_plan_oidc_subjects : "${local.subject_prefix[each.key]}:${s}"]
+            )
           }
         }
       }
