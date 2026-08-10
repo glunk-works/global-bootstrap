@@ -212,6 +212,15 @@ resource "aws_iam_role_policy_attachment" "resume_optimizer_attach" {
 # aws_iam_role_policy only, matching ST Task 2b's "must therefore stay inline" note), and
 # MW's measured dry run never needed it either -- granting an unneeded verb is not
 # least-privilege just because a superseded draft assumed it.
+#
+# ⚠️ Cross-repo hardcoded-literal hazard (CLAUDE.md names this pattern for THIS repo; it is
+# worse across two repos with different reviewers and apply cadences): the string literals
+# below -- "bedrock-rag-store" (collection name), "bedrock-serverless-rag-ai-lab-monthly"
+# (budget name), "/bedrock-rag/" (role path) -- each independently duplicate a literal owned
+# by bedrock-serverless-rag: `local.collection_name` (modules/aws-bedrock-rag/opensearch.tf),
+# the budget resource name (environments/ai-lab/budget.tf), and `path` on bedrock_kb_role
+# (modules/aws-bedrock-rag/iam.tf), respectively. All three match as of 2026-08-10. A rename
+# on either side without the other surfaces as AccessDenied at apply time, not a plan error.
 
 # 5a. Permissions boundary -- the ceiling for every role modules/aws-bedrock-rag/ creates
 # (today, just bedrock_kb_role). Written out per Task 2b(5): "too loose and the boundary is
@@ -291,6 +300,17 @@ resource "aws_iam_policy" "bedrock_rag_workload_policy" {
         # UpdateAssumeRolePolicy to rewrite the trust policy, and the iam:PermissionsBoundary
         # condition key is NOT evaluated for UpdateAssumeRolePolicy/UpdateRole/TagRole/etc, so
         # Resource-scoping is the only containment available for these -- never "*".
+        #
+        # ⚠️ RESIDUAL, recorded rather than hidden: a permissions boundary caps what a role
+        # CAN DO, never WHO CAN ASSUME it. iam:UpdateAssumeRolePolicy lets this CI role rewrite
+        # bedrock_kb_role's trust policy to an arbitrary Principal -- e.g. an external account
+        # -- creating a persistent access path into the RAG corpus (the boundary still permits
+        # s3:GetObject/aoss:APIAccessAll) that survives OIDC trust revocation, until the next
+        # `tofu apply` reverts it. Granted anyway because Task 2b(1) requires it for S2-T5's
+        # own trust-policy rewrite and there is no narrower AWS-side containment for this verb.
+        # Mitigated only by: (a) reaching this role requires already holding the CI role, whose
+        # own trust is StringEquals-pinned (F2, closed); (b) BR-D20's frequent destroy/apply
+        # cycle limits how long a rewritten trust policy would survive undetected.
         Sid    = "ReadUpdateTagKBExecutionRole"
         Effect = "Allow"
         Action = [
@@ -339,6 +359,12 @@ resource "aws_iam_policy" "bedrock_rag_workload_policy" {
         # "administering collections" example policy scopes exactly these three verbs to
         # collection/* -- confirmed 2026-08-10 against the OpenSearch Serverless developer
         # guide's IAM security page.
+        #
+        # RESIDUAL, unavoidable and no wider than the bootstrap/state-backend.tf grant this
+        # replaces: aoss:DeleteCollection on collection/* reaches every AOSS collection in this
+        # account, not just ours (the ARN wildcards the opaque collection ID, which this root
+        # cannot know in advance -- see CollectionDataPlaneAccess below for the same shape). No
+        # second AOSS consumer exists today.
         Sid      = "ManageCollectionLifecycle"
         Effect   = "Allow"
         Action   = ["aoss:CreateCollection", "aoss:DeleteCollection", "aoss:UpdateCollection"]
@@ -352,6 +378,19 @@ resource "aws_iam_policy" "bedrock_rag_workload_policy" {
         # aoss:collection condition key, which inspects the policy document's own Rules[].
         # Resource content -- meaningful here because the collection name is a static literal
         # (local.collection_name in opensearch.tf), not something this root can't see.
+        #
+        # Verified against AWS's own worked example for this EXACT action pair (not inferred):
+        # docs.aws.amazon.com/opensearch-service/latest/developerguide/security-iam-serverless.html
+        # §"Policy condition keys" shows `Action: [aoss:CreateAccessPolicy, aoss:CreateSecurityPolicy],
+        # Resource: "*", Condition: {StringLike: {aoss:collection: "..."}}` verbatim. UpdateAccessPolicy
+        # submits the same Rules[]-bearing document shape as Create, so it is grouped here on the
+        # same basis, though AWS's example does not name it directly -- if a real apply 403s on
+        # UpdateAccessPolicy specifically, that is the one action in this statement to re-verify.
+        # Multivalued-key risk considered and ruled out: every policy this project ever writes
+        # (encryption_policy, network_policy, data_access_policy) references only the single
+        # collection name "bedrock-rag-store" across all of its Rules[], so even if aoss:collection
+        # resolves to a set rather than a scalar, StringEquals still holds -- there is no rule
+        # anywhere in this module referencing a second collection name for it to disagree with.
         Sid      = "WriteCollectionPoliciesForOurCollection"
         Effect   = "Allow"
         Action   = ["aoss:CreateSecurityPolicy", "aoss:CreateAccessPolicy", "aoss:UpdateAccessPolicy"]
@@ -366,7 +405,11 @@ resource "aws_iam_policy" "bedrock_rag_workload_policy" {
         # Get/Delete/List *Policy calls address the policy by NAME, not by a collection
         # pattern in the request body, so aoss:collection does not resolve for them -- adding
         # it here would make the condition never match and silently deny every call. Resource
-        # = "*" is AWS's own requirement for this group, not a residual we chose.
+        # = "*" is AWS's own requirement for this group, not a residual we chose. RESIDUAL
+        # worth naming plainly: aoss:DeleteSecurityPolicy/DeleteAccessPolicy on "*" can delete
+        # any project's AOSS policies, account-wide -- no wider than the measured baseline
+        # this replaces, and no second AOSS consumer exists today, but it is cross-project
+        # destructive reach, not just cross-project read reach.
         Sid    = "ReadDeleteListCollectionPolicies"
         Effect = "Allow"
         Action = [
@@ -443,10 +486,18 @@ resource "aws_iam_policy" "bedrock_rag_workload_policy" {
       },
       {
         # Protects the boundary FROM the role it constrains -- without this, the CI role could
-        # edit or delete the very policy that is supposed to cap what it can create.
-        Sid      = "DenyModifyingOwnBoundary"
-        Effect   = "Deny"
-        Action   = "iam:*"
+        # edit or delete the very policy that is supposed to cap what it can create. Mutating
+        # verbs only, NOT `iam:*`: S2-T1 threading `permissions_boundary` into the module most
+        # naturally reads this policy's ARN via `data "aws_iam_policy"` (so environments/ai-lab
+        # never hardcodes an account-qualified ARN, BR-D4), which calls iam:GetPolicy and
+        # iam:GetPolicyVersion against this exact ARN on every plan -- a blanket Deny would
+        # break that read, fail-closed, on the very next task that touches this policy.
+        Sid    = "DenyModifyingOwnBoundary"
+        Effect = "Deny"
+        Action = [
+          "iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:SetDefaultPolicyVersion",
+          "iam:DeletePolicy", "iam:TagPolicy", "iam:UntagPolicy"
+        ]
         Resource = aws_iam_policy.bedrock_rag_boundary.arn
       }
     ]

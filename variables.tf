@@ -138,4 +138,19 @@ variable "projects" {
 variable "bedrock_rag_source_bucket_name" {
   description = "bedrock-serverless-rag's S3 source bucket name (environments/ai-lab's data_source_bucket_name). Restricted, not secret (BR-D4) -- set via TF_VAR_, never committed."
   type        = string
+
+  # Same hazard oidc_subject_prefix's own validation exists for, three lines up in this file:
+  # this string is spliced directly into an ARN that project_policies.tf grants
+  # s3:PutBucket*/DeleteBucket on. A value of "*" (or containing one) would render
+  # arn:aws:s3:::*, reopening exactly the account-wide S3 reach this variable exists to close
+  # -- including onto the org state bucket and the findings bucket below.
+  validation {
+    condition     = !strcontains(var.bedrock_rag_source_bucket_name, "*") && !strcontains(var.bedrock_rag_source_bucket_name, "?")
+    error_message = "bedrock_rag_source_bucket_name may not contain '*' or '?' -- both are ARN/glob wildcards and this value is spliced directly into an arn:aws:s3::: Resource."
+  }
+
+  validation {
+    condition     = var.bedrock_rag_source_bucket_name != var.bootstrap_bucket_name && var.bedrock_rag_source_bucket_name != var.findings_bucket_name
+    error_message = "bedrock_rag_source_bucket_name must not equal the org state bucket or the findings bucket -- a collision (typo or copy-paste) would scope bedrock-serverless-rag's S3 bucket-lifecycle grant onto one of those shared resources instead."
+  }
 }

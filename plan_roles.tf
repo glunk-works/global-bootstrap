@@ -226,11 +226,16 @@ resource "aws_iam_policy" "bedrock_rag_plan_policy" {
         Resource = "arn:aws:budgets::${data.aws_caller_identity.current.account_id}:budget/bedrock-serverless-rag-ai-lab-monthly"
       },
       {
-        # BR-D22 state-encryption key access -- all three verbs, matching the apply role's
-        # grant (Task 0c step 1b's decision, not an asymmetric read/write split).
-        Sid      = "StateEncryptionKeyAccess"
+        # BR-D22 state-encryption key access, read-only subset. Deliberately asymmetric with
+        # the apply role despite Task 0c step 1b's text naming all three verbs for "both
+        # roles": kms:GenerateDataKey is the encrypt-side verb (mints a NEW data key, i.e.
+        # writes), and this whole file's own design invariant -- stated in its header comment
+        # and in plan_state_read_policy above -- is that the plan role can only read. Granting
+        # a write-side verb to the one identity assumable from any pull_request contradicts
+        # that invariant for no operational benefit: a plan only ever decrypts.
+        Sid      = "StateEncryptionKeyReadAccess"
         Effect   = "Allow"
-        Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+        Action   = ["kms:Decrypt", "kms:DescribeKey"]
         Resource = aws_kms_key.state_key.arn
       }
     ]
