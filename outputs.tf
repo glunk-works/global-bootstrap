@@ -28,6 +28,11 @@ output "findings_kms_key_arn" {
   value       = aws_kms_key.findings_key.arn
 }
 
+output "state_kms_key_arn" {
+  description = "The ARN of the KMS key for OpenTofu state bucket encryption (BR-D22). Not yet wired into state_bucket's encryption config -- see main.tf's comment."
+  value       = aws_kms_key.state_key.arn
+}
+
 output "bounty_scanner_s3_writer_role_arn" {
   description = "ARN of the chain-only S3 writer role for bounty-infra's per-scan Vultr VM (SE, BI-D5). Export as AWS_SCANNER_WRITER_ROLE_ARN in bounty-infra's Infisical secret store."
   value       = aws_iam_role.bounty_scanner_s3_writer.arn

@@ -158,3 +158,93 @@ resource "aws_iam_role_policy_attachment" "bounty_infra_plan_attach" {
   role       = aws_iam_role.github_actions_plan_role["bounty-infra"].name
   policy_arn = aws_iam_policy.bounty_infra_plan_policy.arn
 }
+
+# ---------------------------------------------------------
+# bedrock-serverless-rag: read-only mirror of the workload policy (F56 gap b, S2-T0c)
+# ---------------------------------------------------------
+# Without this, github-actions-bedrock-serverless-rag-plan holds state-read (from
+# plan_state_read_policy above, generic to every plan_role_projects entry) and NOTHING else --
+# no iam:GetRole, no aoss:*, no bedrock:Get*, no s3:GetBucket* -- and every PR plan 403s on
+# refresh, same gap this file's own header comment names for bounty-infra. Read-only subset of
+# project_policies.tf's bedrock_rag_workload_policy: every Create/Delete/Put/Update/Attach/
+# Detach verb dropped, every Resource scope kept identical.
+resource "aws_iam_policy" "bedrock_rag_plan_policy" {
+  name        = "glunk-works-bedrock-serverless-rag-plan-readonly"
+  description = "Read-only permissions for bedrock-serverless-rag PR-time tofu plan"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # Mirrors ManageSourceBucketLifecycle, read-only. s3:ListBucket travels with the
+        # Get* verbs for the same reason bootstrap/state-backend.tf grants it to the apply
+        # role: HeadBucket's anti-enumeration 403 makes the provider's refresh misreport the
+        # bucket as deleted without it.
+        Sid    = "ReadSourceBucketLifecycle"
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket", "s3:GetBucket*",
+          "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration",
+          "s3:GetReplicationConfiguration", "s3:GetAccelerateConfiguration"
+        ]
+        Resource = "arn:aws:s3:::${var.bedrock_rag_source_bucket_name}"
+      },
+      {
+        # Mirrors ReadUpdateTagKBExecutionRole's read-only subset.
+        Sid    = "ReadKBExecutionRole"
+        Effect = "Allow"
+        Action = [
+          "iam:GetRole", "iam:ListRolePolicies", "iam:GetRolePolicy",
+          "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole"
+        ]
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/bedrock-rag/*"
+      },
+      {
+        # Mirrors ReadDeleteListCollectionPolicies -- see that statement's comment for why
+        # Resource = "*" is AWS's own requirement here, not a residual we chose.
+        Sid    = "ReadCollectionPolicies"
+        Effect = "Allow"
+        Action = [
+          "aoss:GetSecurityPolicy", "aoss:ListSecurityPolicies",
+          "aoss:GetAccessPolicy", "aoss:BatchGetCollection", "aoss:ListTagsForResource"
+        ]
+        Resource = "*"
+      },
+      {
+        # Mirrors ReadDeleteKnowledgeBaseAndDataSource's read-only subset. No aoss:APIAccessAll
+        # here -- that is a data-plane grant `tofu plan` never exercises.
+        Sid      = "ReadKnowledgeBaseAndDataSource"
+        Effect   = "Allow"
+        Action   = ["bedrock:GetKnowledgeBase", "bedrock:GetDataSource", "bedrock:ListTagsForResource"]
+        Resource = "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:knowledge-base/*"
+      },
+      {
+        # Mirrors ManageCostBudget's read-only subset (drops budgets:ModifyBudget).
+        Sid      = "ReadCostBudget"
+        Effect   = "Allow"
+        Action   = ["budgets:ViewBudget", "budgets:ListTagsForResource"]
+        Resource = "arn:aws:budgets::${data.aws_caller_identity.current.account_id}:budget/bedrock-serverless-rag-ai-lab-monthly"
+      },
+      {
+        # BR-D22 state-encryption key access -- all three verbs, matching the apply role's
+        # grant (Task 0c step 1b's decision, not an asymmetric read/write split).
+        Sid      = "StateEncryptionKeyAccess"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+        Resource = aws_kms_key.state_key.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "bedrock_rag_plan_attach" {
+  role       = aws_iam_role.github_actions_plan_role["bedrock-serverless-rag"].name
+  policy_arn = aws_iam_policy.bedrock_rag_plan_policy.arn
+}
+
+# Same findings Deny (F58 gap b) as the apply role -- "Attach our Deny to BOTH our roles"
+# (Task 0c's own constraint). The policy resource itself lives in project_policies.tf.
+resource "aws_iam_role_policy_attachment" "bedrock_rag_plan_findings_deny_attach" {
+  role       = aws_iam_role.github_actions_plan_role["bedrock-serverless-rag"].name
+  policy_arn = aws_iam_policy.bedrock_rag_findings_deny.arn
+}

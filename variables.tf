@@ -83,6 +83,27 @@ variable "projects" {
       # deploy-infra.yml's apply job runs `environment: production`.
       extra_oidc_subjects = ["environment:production"]
     }
+
+    # Re-added per S2-T0c, per ST Task 2b's normative spec. NOT a bare re-add of the F45/F42
+    # entry removed above -- this one carries oidc_subject_prefix (the repo is org-owned and
+    # presents an ID-qualified subject, BR-D27), a permissions boundary + role-path scope
+    # (project_policies.tf), and a findings Deny extended to kms: as well as s3: (F58 gap b).
+    "bedrock-serverless-rag" = {
+      repo_name = "bedrock-serverless-rag"
+      plan_role = true
+      # The repo transferred into this org (BR-D13) and presents
+      # repo:<owner>@<org_id>/<repo>@<repo_id>:<context>, which the plain computed prefix
+      # never matches -- ids read with `gh api repos/glunk-works/bedrock-serverless-rag
+      # --jq '.id, .owner.id'`. Not BR-D4 restricted: a public org name, a public repo name,
+      # and two GitHub numeric ids.
+      oidc_subject_prefix = "repo:glunk-works@295891085/bedrock-serverless-rag@1253604712"
+      # deploy.yml's apply job runs `environment: production` (S1a-T5).
+      extra_oidc_subjects = ["environment:production"]
+      # Without this, deploy.yml's push-triggered tofu-plan-main can never assume the plan
+      # role at all (F56 gap a) -- it is a READ-ONLY role, so trusting the `main` ref costs
+      # nothing that `:pull_request` did not already cost.
+      extra_plan_oidc_subjects = ["ref:refs/heads/main"]
+    }
   }
 
   # Mirrors bootstrap/oidc-setup.tf's validations for github_oidc_subject_prefixes.
@@ -104,4 +125,17 @@ variable "projects" {
     ])
     error_message = "A project's oidc_subject_prefix may not contain '*' or '?': in IAM StringLike both are wildcards that match ':' too, so one would widen that project's trust policy far beyond the intended repository."
   }
+}
+
+# bedrock-serverless-rag's S3 source bucket name -- needed to scope project_policies.tf's and
+# plan_roles.tf's S3 statements to this one bucket instead of Resource = "*", which is exactly
+# the escape S2-T0c exists to close (an unscoped s3:DeleteBucket reaches THIS bucket, the org
+# state bucket above, and the findings bucket). Not a `var.projects` map field: that map's
+# whole value is a COMMITTED default, and this value is BR-D4 restricted (a bucket name on a
+# public repo is free reconnaissance) -- environments/ai-lab's own `data_source_bucket_name`
+# variable has no default for the identical reason. No default here either; set via
+# TF_VAR_bedrock_rag_source_bucket_name at apply time, same as that repo's own convention.
+variable "bedrock_rag_source_bucket_name" {
+  description = "bedrock-serverless-rag's S3 source bucket name (environments/ai-lab's data_source_bucket_name). Restricted, not secret (BR-D4) -- set via TF_VAR_, never committed."
+  type        = string
 }

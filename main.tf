@@ -44,6 +44,23 @@ resource "aws_dynamodb_table" "state_locks" {
 }
 
 # ---------------------------------------------------------
+# 2a. State bucket encryption key (BR-D22, S2-T0c)
+# ---------------------------------------------------------
+# BR-D22 says the key-provider choice is "upstream's to make" -- no upstream issue was ever
+# filed for it, and no key existed anywhere (state_bucket above still relies on the bucket's
+# own SSE-S3 default). Created HERE, beside the bucket it will eventually encrypt, rather than
+# in any per-project root: a project's own state (and any CMK declared alongside it) is
+# destroyed by that project's own destroy/apply cycles, and this key must outlive all of them.
+# Wiring it into state_encryption's `kms_master_key_id` is a SEPARATE change (S2-T2) -- this PR
+# only creates the key and grants bedrock-serverless-rag's two roles access to it, so that grant
+# exists before anything depends on it.
+resource "aws_kms_key" "state_key" {
+  description             = "KMS key for OpenTofu state bucket encryption (BR-D22)"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+}
+
+# ---------------------------------------------------------
 # 3. Centralized Vulnerability Findings Storage
 # ---------------------------------------------------------
 resource "aws_kms_key" "findings_key" {
