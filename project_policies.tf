@@ -196,3 +196,345 @@ resource "aws_iam_role_policy_attachment" "resume_optimizer_attach" {
   role       = aws_iam_role.github_actions_role["resume-optimizer"].name
   policy_arn = aws_iam_policy.resume_optimizer_policy.arn
 }
+
+# ---------------------------------------------------------
+# 5. Bedrock Serverless RAG (S2-T0c, re-added per ST Task 2b's normative spec)
+# ---------------------------------------------------------
+# NOT a bare re-add of the F42/F45 grant deleted in section 3 above -- see variables.tf's entry
+# comment. Every Resource below is re-derived from what modules/aws-bedrock-rag/ actually
+# declares; the verbs are bootstrap/state-backend.tf's MEASURED list (MW-T5/T6's real
+# create-then-destroy dry run under CI), not re-guessed. Where a verb genuinely has no
+# resource-level permission support in AWS's own IAM implementation -- confirmed 2026-08-10
+# against the OpenSearch Serverless and Bedrock service authorization references, not assumed
+# -- it stays Resource = "*" on its own dedicated statement, so the residual is auditable
+# rather than hidden inside a mixed statement. iam:CreatePolicy (Task 2b(3)'s fix) is
+# deliberately absent: this workload creates zero managed policies (inline
+# aws_iam_role_policy only, matching ST Task 2b's "must therefore stay inline" note), and
+# MW's measured dry run never needed it either -- granting an unneeded verb is not
+# least-privilege just because a superseded draft assumed it.
+#
+# ⚠️ Cross-repo hardcoded-literal hazard (CLAUDE.md names this pattern for THIS repo; it is
+# worse across two repos with different reviewers and apply cadences): the string literals
+# below -- "bedrock-rag-store" (collection name), "bedrock-serverless-rag-ai-lab-monthly"
+# (budget name), "/bedrock-rag/" (role path) -- each independently duplicate a literal owned
+# by bedrock-serverless-rag: `local.collection_name` (modules/aws-bedrock-rag/opensearch.tf),
+# the budget resource name (environments/ai-lab/budget.tf), and `path` on bedrock_kb_role
+# (modules/aws-bedrock-rag/iam.tf), respectively. All three match as of 2026-08-10. A rename
+# on either side without the other surfaces as AccessDenied at apply time, not a plan error.
+
+# 5a. Permissions boundary -- the ceiling for every role modules/aws-bedrock-rag/ creates
+# (today, just bedrock_kb_role). Written out per Task 2b(5): "too loose and the boundary is
+# decorative; too tight and every apply breaks." Not yet referenced by the module -- S2-T1
+# threads `permissions_boundary` from environments/ai-lab and points it at this ARN.
+resource "aws_iam_policy" "bedrock_rag_boundary" {
+  name        = "bedrock-rag-workload-boundary"
+  path        = "/bedrock-rag/"
+  description = "Permissions boundary for every IAM role modules/aws-bedrock-rag/ creates (S2-T1)."
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "AllowEmbeddingModelInvocation"
+        Effect   = "Allow"
+        Action   = "bedrock:InvokeModel"
+        Resource = "arn:aws:bedrock:${var.aws_region}::foundation-model/amazon.titan-embed-text-v2:0"
+      },
+      {
+        Sid    = "AllowSourceBucketRead"
+        Effect = "Allow"
+        Action = ["s3:GetObject", "s3:ListBucket"]
+        Resource = [
+          "arn:aws:s3:::${var.bedrock_rag_source_bucket_name}",
+          "arn:aws:s3:::${var.bedrock_rag_source_bucket_name}/*"
+        ]
+      },
+      {
+        # bootstrap/ (and this root) cannot see the collection ID generated in
+        # environments/ai-lab's state -- region-wildcarded, matching
+        # bootstrap/state-backend.tf's aoss:APIAccessAll reasoning.
+        Sid      = "AllowCollectionDataPlaneAccess"
+        Effect   = "Allow"
+        Action   = "aoss:APIAccessAll"
+        Resource = "arn:aws:aoss:*:${data.aws_caller_identity.current.account_id}:collection/*"
+      },
+      {
+        # Task 2b(6)/F58 gap b, replicated here per Task 0c's own constraint: putting this in
+        # the boundary too means ANY role our CI creates inherits it as a ceiling, regardless
+        # of that role's own policy -- not just the two roles it is directly attached to below.
+        Sid    = "DenyFindingsDataAndKeyAccess"
+        Effect = "Deny"
+        Action = ["s3:*", "kms:*"]
+        Resource = [
+          aws_s3_bucket.findings_bucket.arn,
+          "${aws_s3_bucket.findings_bucket.arn}/*",
+          aws_kms_key.findings_key.arn
+        ]
+      }
+    ]
+  })
+}
+
+# 5b. Workload policy -- the CI apply role.
+resource "aws_iam_policy" "bedrock_rag_workload_policy" {
+  name        = "glunk-works-bedrock-serverless-rag-workload"
+  description = "Least-privilege permissions for the bedrock-serverless-rag apply pipeline (S2-T0c)."
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # aws_s3_bucket.bedrock_source's lifecycle. Bucket-level actions only -- CI never
+        # reads/writes objects in this bucket, only creates/configures/destroys it.
+        Sid    = "ManageSourceBucketLifecycle"
+        Effect = "Allow"
+        Action = [
+          "s3:CreateBucket", "s3:DeleteBucket", "s3:ListBucket",
+          "s3:PutBucket*", "s3:GetBucket*",
+          "s3:GetEncryptionConfiguration", "s3:PutEncryptionConfiguration",
+          "s3:GetLifecycleConfiguration", "s3:GetReplicationConfiguration",
+          "s3:GetAccelerateConfiguration"
+        ]
+        Resource = "arn:aws:s3:::${var.bedrock_rag_source_bucket_name}"
+      },
+      {
+        # aws_iam_role.bedrock_kb_role: read/delete/update/tag. Task 2b(1) fix: S2-T5 needs
+        # UpdateAssumeRolePolicy to rewrite the trust policy, and the iam:PermissionsBoundary
+        # condition key is NOT evaluated for UpdateAssumeRolePolicy/UpdateRole/TagRole/etc, so
+        # Resource-scoping is the only containment available for these -- never "*".
+        #
+        # ⚠️ RESIDUAL, recorded rather than hidden: a permissions boundary caps what a role
+        # CAN DO, never WHO CAN ASSUME it. iam:UpdateAssumeRolePolicy lets this CI role rewrite
+        # bedrock_kb_role's trust policy to an arbitrary Principal -- e.g. an external account
+        # -- creating a persistent access path into the RAG corpus (the boundary still permits
+        # s3:GetObject/aoss:APIAccessAll) that survives OIDC trust revocation, until the next
+        # `tofu apply` reverts it. Granted anyway because Task 2b(1) requires it for S2-T5's
+        # own trust-policy rewrite and there is no narrower AWS-side containment for this verb.
+        # Mitigated only by: (a) reaching this role requires already holding the CI role, whose
+        # own trust is StringEquals-pinned (F2, closed); (b) BR-D20's frequent destroy/apply
+        # cycle limits how long a rewritten trust policy would survive undetected.
+        Sid    = "ReadUpdateTagKBExecutionRole"
+        Effect = "Allow"
+        Action = [
+          "iam:GetRole", "iam:DeleteRole",
+          "iam:ListRolePolicies", "iam:GetRolePolicy", "iam:ListAttachedRolePolicies",
+          "iam:ListInstanceProfilesForRole",
+          "iam:UpdateAssumeRolePolicy", "iam:UpdateRole", "iam:UpdateRoleDescription",
+          "iam:TagRole", "iam:UntagRole"
+        ]
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/bedrock-rag/*"
+      },
+      {
+        # The permission-MODIFYING verbs -- the iam:PermissionsBoundary condition key IS
+        # evaluated for these, so every role this statement can create or reconfigure must
+        # carry OUR boundary, not none and not a different one.
+        Sid    = "CreateModifyKBExecutionRoleUnderBoundary"
+        Effect = "Allow"
+        Action = [
+          "iam:CreateRole", "iam:PutRolePolicy", "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy", "iam:DeleteRolePolicy", "iam:PutRolePermissionsBoundary"
+        ]
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/bedrock-rag/*"
+        Condition = {
+          StringEquals = {
+            "iam:PermissionsBoundary" = aws_iam_policy.bedrock_rag_boundary.arn
+          }
+        }
+      },
+      {
+        # iam:PassRole -- CreateKnowledgeBase's roleArn parameter. Scoped by BOTH Resource and
+        # PassedToService (Task 2b(2) fix: either alone is insufficient); mirrors
+        # bootstrap/state-backend.tf's already-scoped statement verbatim -- one of the two
+        # "model" statements Task 0c names directly.
+        Sid      = "PassKBExecutionRoleToBedrock"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/bedrock-rag/*"
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "bedrock.amazonaws.com"
+          }
+        }
+      },
+      {
+        # aws_opensearchserverless_collection.vector_store's lifecycle. AWS's own
+        # "administering collections" example policy scopes exactly these three verbs to
+        # collection/* -- confirmed 2026-08-10 against the OpenSearch Serverless developer
+        # guide's IAM security page.
+        #
+        # RESIDUAL, unavoidable and no wider than the bootstrap/state-backend.tf grant this
+        # replaces: aoss:DeleteCollection on collection/* reaches every AOSS collection in this
+        # account, not just ours (the ARN wildcards the opaque collection ID, which this root
+        # cannot know in advance -- see CollectionDataPlaneAccess below for the same shape). No
+        # second AOSS consumer exists today.
+        Sid      = "ManageCollectionLifecycle"
+        Effect   = "Allow"
+        Action   = ["aoss:CreateCollection", "aoss:DeleteCollection", "aoss:UpdateCollection"]
+        Resource = "arn:aws:aoss:*:${data.aws_caller_identity.current.account_id}:collection/*"
+      },
+      {
+        # The two security policies (encryption, network) and the one data-access policy.
+        # AOSS's *SecurityPolicy/*AccessPolicy actions do not support a Resource ARN at all --
+        # confirmed against the same guide: CreateAccessPolicy/CreateSecurityPolicy's own
+        # official example uses Resource = "*". The only real containment available is the
+        # aoss:collection condition key, which inspects the policy document's own Rules[].
+        # Resource content -- meaningful here because the collection name is a static literal
+        # (local.collection_name in opensearch.tf), not something this root can't see.
+        #
+        # Verified against AWS's own worked example for this EXACT action pair (not inferred):
+        # docs.aws.amazon.com/opensearch-service/latest/developerguide/security-iam-serverless.html
+        # §"Policy condition keys" shows `Action: [aoss:CreateAccessPolicy, aoss:CreateSecurityPolicy],
+        # Resource: "*", Condition: {StringLike: {aoss:collection: "..."}}` verbatim. UpdateAccessPolicy
+        # submits the same Rules[]-bearing document shape as Create, so it is grouped here on the
+        # same basis, though AWS's example does not name it directly -- if a real apply 403s on
+        # UpdateAccessPolicy specifically, that is the one action in this statement to re-verify.
+        # Multivalued-key risk considered and ruled out: every policy this project ever writes
+        # (encryption_policy, network_policy, data_access_policy) references only the single
+        # collection name "bedrock-rag-store" across all of its Rules[], so even if aoss:collection
+        # resolves to a set rather than a scalar, StringEquals still holds -- there is no rule
+        # anywhere in this module referencing a second collection name for it to disagree with.
+        Sid      = "WriteCollectionPoliciesForOurCollection"
+        Effect   = "Allow"
+        Action   = ["aoss:CreateSecurityPolicy", "aoss:CreateAccessPolicy", "aoss:UpdateAccessPolicy"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "aoss:collection" = "bedrock-rag-store"
+          }
+        }
+      },
+      {
+        # Get/Delete/List *Policy calls address the policy by NAME, not by a collection
+        # pattern in the request body, so aoss:collection does not resolve for them -- adding
+        # it here would make the condition never match and silently deny every call. Resource
+        # = "*" is AWS's own requirement for this group, not a residual we chose. RESIDUAL
+        # worth naming plainly: aoss:DeleteSecurityPolicy/DeleteAccessPolicy on "*" can delete
+        # any project's AOSS policies, account-wide -- no wider than the measured baseline
+        # this replaces, and no second AOSS consumer exists today, but it is cross-project
+        # destructive reach, not just cross-project read reach.
+        Sid    = "ReadDeleteListCollectionPolicies"
+        Effect = "Allow"
+        Action = [
+          "aoss:GetSecurityPolicy", "aoss:DeleteSecurityPolicy", "aoss:ListSecurityPolicies",
+          "aoss:GetAccessPolicy", "aoss:DeleteAccessPolicy",
+          "aoss:BatchGetCollection", "aoss:ListTagsForResource"
+        ]
+        Resource = "*"
+      },
+      {
+        # Data-plane grant so create_index.py's local-exec can reach the collection at all --
+        # distinct from the data-access-policy Principal above (F55's "two independent
+        # grants" gap). Mirrors bootstrap/state-backend.tf's already-scoped statement verbatim
+        # -- the second of the two "model" statements Task 0c names directly, including its
+        # region-wildcard reasoning (this root cannot see the collection ID either).
+        Sid      = "CollectionDataPlaneAccess"
+        Effect   = "Allow"
+        Action   = "aoss:APIAccessAll"
+        Resource = "arn:aws:aoss:*:${data.aws_caller_identity.current.account_id}:collection/*"
+      },
+      {
+        # aws_bedrockagent_knowledge_base.rag_kb / aws_bedrockagent_data_source.rag_source's
+        # CREATE calls. Neither resource is addressable before it exists -- confirmed against
+        # AWS's own worked example (Bedrock Knowledge Bases permissions guide), whose
+        # CreateKnowledgeBase statement is Resource = "*" for the identical reason.
+        # CreateDataSource has no equivalent worked example; grouped here as the conservative
+        # read (a Create action, same unaddressable-before-creation shape) rather than assumed
+        # scopeable -- INFERRED, not measured against a real 403.
+        Sid      = "CreateKnowledgeBaseAndDataSource"
+        Effect   = "Allow"
+        Action   = ["bedrock:CreateKnowledgeBase", "bedrock:CreateDataSource"]
+        Resource = "*"
+      },
+      {
+        # Once created, both nest under the knowledge-base ARN -- AWS's worked example scopes
+        # GetKnowledgeBase/DeleteKnowledgeBase/ListTagsForResource to knowledge-base/{{*}}
+        # exactly this way; DataSource's Get/Delete are grouped here on the same
+        # parent-resource reasoning (data sources have no independent top-level ARN).
+        Sid    = "ReadDeleteKnowledgeBaseAndDataSource"
+        Effect = "Allow"
+        Action = [
+          "bedrock:GetKnowledgeBase", "bedrock:DeleteKnowledgeBase",
+          "bedrock:GetDataSource", "bedrock:DeleteDataSource", "bedrock:ListTagsForResource"
+        ]
+        Resource = "arn:aws:bedrock:${var.aws_region}:${data.aws_caller_identity.current.account_id}:knowledge-base/*"
+      },
+      {
+        # Mirrors bootstrap/state-backend.tf's already-scoped budgets statement verbatim --
+        # the third of the "model" statements Task 0c names directly.
+        Sid      = "ManageCostBudget"
+        Effect   = "Allow"
+        Action   = ["budgets:ModifyBudget", "budgets:ViewBudget", "budgets:ListTagsForResource"]
+        Resource = "arn:aws:budgets::${data.aws_caller_identity.current.account_id}:budget/bedrock-serverless-rag-ai-lab-monthly"
+      },
+      {
+        # BR-D22 state-encryption key access (Task 0c step 1b's decision) -- both this and the
+        # plan role's mirror in plan_roles.tf get all three verbs, not an asymmetric
+        # read/write split, per that step's own text.
+        Sid      = "StateEncryptionKeyAccess"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+        Resource = aws_kms_key.state_key.arn
+      },
+      {
+        # This workload uses inline role policies only (aws_iam_role_policy, never
+        # aws_iam_policy) -- ST Task 2b's own recorded note: a blanket Deny here means it can
+        # never accidentally start managing a customer-managed policy version, which is the
+        # one action a permissions boundary's iam:PermissionsBoundary condition key cannot
+        # constrain.
+        Sid      = "DenyManagedPolicyVersionUpdates"
+        Effect   = "Deny"
+        Action   = "iam:CreatePolicyVersion"
+        Resource = "*"
+      },
+      {
+        # Protects the boundary FROM the role it constrains -- without this, the CI role could
+        # edit or delete the very policy that is supposed to cap what it can create. Mutating
+        # verbs only, NOT `iam:*`: S2-T1 threading `permissions_boundary` into the module most
+        # naturally reads this policy's ARN via `data "aws_iam_policy"` (so environments/ai-lab
+        # never hardcodes an account-qualified ARN, BR-D4), which calls iam:GetPolicy and
+        # iam:GetPolicyVersion against this exact ARN on every plan -- a blanket Deny would
+        # break that read, fail-closed, on the very next task that touches this policy.
+        Sid    = "DenyModifyingOwnBoundary"
+        Effect = "Deny"
+        Action = [
+          "iam:CreatePolicyVersion", "iam:DeletePolicyVersion", "iam:SetDefaultPolicyVersion",
+          "iam:DeletePolicy", "iam:TagPolicy", "iam:UntagPolicy"
+        ]
+        Resource = aws_iam_policy.bedrock_rag_boundary.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "bedrock_rag_workload_attach" {
+  role       = aws_iam_role.github_actions_role["bedrock-serverless-rag"].name
+  policy_arn = aws_iam_policy.bedrock_rag_workload_policy.arn
+}
+
+# 5c. Findings Deny (F58 gap b) -- extended to kms: as well as s3:, per Task 2b(6). A new,
+# standalone policy: bounty_infra_plan_policy's own inline Deny is bounty-infra's to fix
+# (glunk-works/global-bootstrap#6, gap (a)), not touched here. Attached to BOTH
+# bedrock-serverless-rag roles -- the apply-role attachment is below; the plan-role attachment
+# lives in plan_roles.tf alongside everything else about that identity.
+resource "aws_iam_policy" "bedrock_rag_findings_deny" {
+  name        = "bedrock-serverless-rag-deny-findings-access"
+  description = "Deny s3: and kms: on the shared findings bucket/key for both bedrock-serverless-rag roles (F58 gap b)."
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DenyFindingsDataAndKeyAccess"
+        Effect = "Deny"
+        Action = ["s3:*", "kms:*"]
+        Resource = [
+          aws_s3_bucket.findings_bucket.arn,
+          "${aws_s3_bucket.findings_bucket.arn}/*",
+          aws_kms_key.findings_key.arn
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "bedrock_rag_findings_deny_attach" {
+  role       = aws_iam_role.github_actions_role["bedrock-serverless-rag"].name
+  policy_arn = aws_iam_policy.bedrock_rag_findings_deny.arn
+}

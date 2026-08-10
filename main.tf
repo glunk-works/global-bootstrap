@@ -44,6 +44,37 @@ resource "aws_dynamodb_table" "state_locks" {
 }
 
 # ---------------------------------------------------------
+# 2a. State bucket encryption key (BR-D22, S2-T0c)
+# ---------------------------------------------------------
+# BR-D22 says the key-provider choice is "upstream's to make" -- no upstream issue was ever
+# filed for it, and no key existed anywhere (state_bucket above still relies on the bucket's
+# own SSE-S3 default). Created HERE, beside the bucket it will eventually protect, rather than
+# in any per-project root: a project's own state (and any CMK declared alongside it) is
+# destroyed by that project's own destroy/apply cycles, and this key must outlive all of them.
+#
+# ⚠️ BR-D22 (docs/hardening_roadmap.md, bedrock-serverless-rag) is explicit that the mechanism
+# is OpenTofu's NATIVE, CLIENT-SIDE `terraform { encryption { key_provider "aws_kms" ... } }`
+# block -- each consuming repo (including this one, for its OWN state) owns its own
+# `encryption {}` block pointed at a key. It is deliberately NOT `aws_s3_bucket_server_side_
+# encryption_configuration`'s `kms_master_key_id` (server-side SSE-KMS): the roadmap's own
+# reasoning is that SSE-S3/SSE-KMS does not protect a state file from anyone who can
+# legitimately `s3:GetObject` it -- which includes a plan role assumable from any pull
+# request -- so flipping `state_encryption` above to SSE-KMS would not deliver the control
+# BR-D22 asks for, AND would break every sibling project's plan (tri-loop-dev,
+# resume-optimizer, bounty-infra hold no `kms:` grant anywhere) the moment it landed. This PR
+# only creates the key and grants bedrock-serverless-rag's two roles `kms:Decrypt`/
+# `GenerateDataKey`/`DescribeKey` on it, so the grant exists before whichever later change adds
+# bedrock-serverless-rag's own `encryption {}` block (and, separately, migrates its state under
+# this shared bucket's `bedrock-serverless-rag/*` prefix -- its backend still points at its own
+# `personal-bedrock-lab-state` bucket today, unrelated to this one). Wiring the key in for every
+# OTHER project is separate again, out of scope here.
+resource "aws_kms_key" "state_key" {
+  description             = "KMS key for OpenTofu state bucket encryption (BR-D22)"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+}
+
+# ---------------------------------------------------------
 # 3. Centralized Vulnerability Findings Storage
 # ---------------------------------------------------------
 resource "aws_kms_key" "findings_key" {
