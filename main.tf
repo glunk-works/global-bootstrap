@@ -85,6 +85,18 @@ data "aws_iam_openid_connect_provider" "github" {
 # ---------------------------------------------------------
 # 5. Dynamic CI/CD Roles (Generated 1 per project)
 # ---------------------------------------------------------
+
+# The OIDC subject prefix each project's roles are built from. Defaults to the
+# plain computed form; a project can override via `oidc_subject_prefix` when it
+# presents an ID-qualified subject instead (BR-D27). The default preserves
+# every existing project's rendered value byte-for-byte.
+locals {
+  subject_prefix = {
+    for k, v in var.projects :
+    k => coalesce(v.oidc_subject_prefix, "repo:${var.github_organization}/${v.repo_name}")
+  }
+}
+
 resource "aws_iam_role" "github_actions_role" {
   for_each = var.projects
 
@@ -112,8 +124,8 @@ resource "aws_iam_role" "github_actions_role" {
             # addition, not a replacement, because sibling workflows on the same
             # role (image build, scan dispatch) still present the branch subject.
             "token.actions.githubusercontent.com:sub" = concat(
-              ["repo:${var.github_organization}/${each.value.repo_name}:ref:refs/heads/main"],
-              [for s in each.value.extra_oidc_subjects : "repo:${var.github_organization}/${each.value.repo_name}:${s}"]
+              ["${local.subject_prefix[each.key]}:ref:refs/heads/main"],
+              [for s in each.value.extra_oidc_subjects : "${local.subject_prefix[each.key]}:${s}"]
             )
           }
         }

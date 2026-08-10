@@ -42,7 +42,7 @@ resource "aws_iam_role" "github_actions_plan_role" {
           # wildcard-free string, so there is no reason to accept a pattern.
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-            "token.actions.githubusercontent.com:sub" = "repo:${var.github_organization}/${each.value.repo_name}:pull_request"
+            "token.actions.githubusercontent.com:sub" = "${local.subject_prefix[each.key]}:pull_request"
           }
         }
       }
