@@ -39,6 +39,22 @@ variable "projects" {
     # "repo:<org>/<repo>:". Needed because a job referencing a GitHub
     # Environment presents `environment:<name>` INSTEAD OF the branch subject.
     extra_oidc_subjects = optional(list(string), [])
+
+    # Extra OIDC subject suffixes the PLAN role will also trust, appended to
+    # the same computed prefix. The plan role otherwise trusts only
+    # ":pull_request", so a project whose plan-on-push job needs to run (e.g.
+    # a push-triggered tofu-plan-main) must list that context here. Declared
+    # here; NOT YET consumed — plan_roles.tf still hardcodes ":pull_request"
+    # until that is wired up separately (BR-D27, F56 gap a).
+    extra_plan_oidc_subjects = optional(list(string), [])
+
+    # Override for the computed subject prefix ("repo:<org>/<repo_name>").
+    # An org-owned repo can present an ID-QUALIFIED subject instead of the
+    # plain form (repo:<owner>@<org_id>/<repo>@<repo_id>:<context>), which the
+    # plain computed prefix will never match — this lets a project supply its
+    # measured prefix instead. null (the default) preserves today's computed
+    # plain form for every existing project (BR-D27).
+    oidc_subject_prefix = optional(string, null)
   }))
   default = {
     "tri-loop-dev"     = { repo_name = "tri-loop-dev" }
@@ -67,5 +83,25 @@ variable "projects" {
       # deploy-infra.yml's apply job runs `environment: production`.
       extra_oidc_subjects = ["environment:production"]
     }
+  }
+
+  # Mirrors bootstrap/oidc-setup.tf's validations for github_oidc_subject_prefixes.
+  # Load-bearing in THIS PR specifically: this is the one window in which
+  # oidc_subject_prefix exists while both roles' operators are still StringLike,
+  # where '*' matches ':' too.
+  validation {
+    condition = alltrue([
+      for k, v in var.projects :
+      v.oidc_subject_prefix == null || startswith(v.oidc_subject_prefix, "repo:")
+    ])
+    error_message = "A project's oidc_subject_prefix, if set, must start with 'repo:' — a bare owner/repo would not match any GitHub OIDC subject."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, v in var.projects :
+      v.oidc_subject_prefix == null || (!strcontains(v.oidc_subject_prefix, "*") && !strcontains(v.oidc_subject_prefix, "?"))
+    ])
+    error_message = "A project's oidc_subject_prefix may not contain '*' or '?': in IAM StringLike both are wildcards that match ':' too, so one would widen that project's trust policy far beyond the intended repository."
   }
 }
