@@ -16,6 +16,15 @@
 # what `tofu plan` actually refreshes. Notably NOT the AWS-managed
 # `ReadOnlyAccess`, which would grant `s3:GetObject` across every bucket in the
 # account, including the bug-bounty findings archive.
+#
+# ⚠️ "READ-ONLY" HERE MEANS "CANNOT CHANGE INFRASTRUCTURE OR STATE" -- it does NOT
+# mean "every granted verb has a read-shaped name." Amended 2026-08-10: OpenTofu's
+# aws_kms state-encryption key provider calls kms:GenerateDataKey unconditionally on
+# every init, so a plan role that omits it cannot plan at all (see the long note on
+# StateEncryptionKeyReadAccess below for the measurement). The invariant is enforced
+# where it is actually load-bearing -- no s3:PutObject on the state prefix, and no
+# mutating verb in any workload statement -- not by pattern-matching verb names.
+# Read that note before narrowing any grant in this file.
 
 locals {
   # Only projects that opt in via `plan_role = true` get one.
@@ -226,16 +235,37 @@ resource "aws_iam_policy" "bedrock_rag_plan_policy" {
         Resource = "arn:aws:budgets::${data.aws_caller_identity.current.account_id}:budget/bedrock-serverless-rag-ai-lab-monthly"
       },
       {
-        # BR-D22 state-encryption key access, read-only subset. Deliberately asymmetric with
-        # the apply role despite Task 0c step 1b's text naming all three verbs for "both
-        # roles": kms:GenerateDataKey is the encrypt-side verb (mints a NEW data key, i.e.
-        # writes), and this whole file's own design invariant -- stated in its header comment
-        # and in plan_state_read_policy above -- is that the plan role can only read. Granting
-        # a write-side verb to the one identity assumable from any pull_request contradicts
-        # that invariant for no operational benefit: a plan only ever decrypts.
+        # BR-D22 state-encryption key access.
+        #
+        # ~~Deliberately asymmetric with the apply role despite Task 0c step 1b's text naming
+        # all three verbs for "both roles": kms:GenerateDataKey is the encrypt-side verb
+        # (mints a NEW data key, i.e. writes) ... a plan only ever decrypts.~~
+        # 🔴 CORRECTED 2026-08-10 (bedrock-serverless-rag S2-T4 preflight). THE STRUCK
+        # REASONING IS WRONG ON ITS FACTUAL PREMISE, and it would have broken CI the moment
+        # the consuming repo adopted this role. **A plan does NOT only ever decrypt.**
+        #
+        # Measured from OpenTofu's own source, not inferred from the verb's name:
+        # internal/encryption/keyprovider/aws_kms/provider.go's Provide() calls
+        # GenerateDataKey UNCONDITIONALLY, at the top of the method, on every operation --
+        # it always mints a fresh encryption key. Decrypt is the CONDITIONAL call, made only
+        # when existing metadata carries a ciphertext blob. So `tofu init` + `tofu plan`
+        # against encrypted state needs GenerateDataKey even though the plan writes nothing.
+        # Without it, a real init fails AccessDenied before it ever reads state.
+        #
+        # THIS IS NOT A WRITE PATH, which is what the struck comment actually cared about.
+        # GenerateDataKey returns a new data key to the caller; it confers no ability to
+        # write state, because writing state needs s3:PutObject on the state prefix and
+        # plan_state_read_policy grants only s3:GetObject/s3:ListBucket. The read-only
+        # invariant this file's header states is enforced at the S3 layer, where it belongs,
+        # and it still holds exactly as before this correction.
+        #
+        # ⚠️ DO NOT "TIGHTEN" THIS BACK. Dropping GenerateDataKey reads as a correct
+        # least-privilege narrowing and is a tool-breaking one -- that is precisely how the
+        # struck version got written. Any future least-privilege pass over this statement
+        # must re-read the source above first.
         Sid      = "StateEncryptionKeyReadAccess"
         Effect   = "Allow"
-        Action   = ["kms:Decrypt", "kms:DescribeKey"]
+        Action   = ["kms:Decrypt", "kms:DescribeKey", "kms:GenerateDataKey"]
         Resource = aws_kms_key.state_key.arn
       }
     ]
