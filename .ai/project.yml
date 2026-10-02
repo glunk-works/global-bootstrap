@@ -1,26 +1,25 @@
 # .ai/project.yml -- global-bootstrap's parameterization of the `way-of-working` plugin.
 # Contract: `reference/project-schema.md` inside the plugin. Values describe this repo as it
 # is on 2026-10-02; a change to one of these facts updates this file in the same PR.
-# This repo has no CLAUDE.md, roadmap, decision log, threat model, CI workflows or branch
-# ruleset as of this date. `null` below records that. The schema does not yet allow `null`
-# for roadmap, sprints_dir, threat_model, decisions.* or ruleset.name
-# (`schema-complete.sh check` reports them invalid), so this file is INCOMPLETE until the
-# repo creates those records or the schema gains a null form. Never invent a path to satisfy it.
+# This repo has no CLAUDE.md, CI workflows or branch ruleset as of this date. `null` on
+# ruleset.name records that: the schema does not yet allow `null` there
+# (`schema-complete.sh check` reports it invalid), so this file stays INCOMPLETE until the repo
+# adds a ruleset. Never invent a name to satisfy it.
 
 repo: glunk-works/global-bootstrap
 pr_base: main
 migration_base: null
 
-roadmap: null
-sprints_dir: null
-threat_model: null
+roadmap: "docs/roadmap.md"
+sprints_dir: "docs/sprints"
+threat_model: "docs/threat_model.md"
 
 planning:
   kind: github_milestones
 
 decisions:
-  log: null
-  prefix: null
+  log: "docs/decisions.md"
+  prefix: "GB-D"
 
 backlog:
   kind: github_issues

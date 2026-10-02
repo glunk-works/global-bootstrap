@@ -8,6 +8,13 @@ This repository contains the foundational OpenTofu infrastructure for the Glunk 
 * **AWS DynamoDB:** A serverless lock table to prevent concurrent state modifications.
 * **AWS IAM & OIDC:** A trust relationship allowing GitHub Actions to assume least-privilege, dynamically generated roles for each repository in the organization.
 
+## Security, roadmap and decisions
+
+The threat model, with its trust boundaries, controls and known residuals, lives in
+[docs/threat_model.md](docs/threat_model.md); this README does not restate it. Planned work is in
+[docs/roadmap.md](docs/roadmap.md) and the GitHub issues and milestones, and the reasoning behind
+past changes is in [docs/decisions.md](docs/decisions.md).
+
 ---
 
 ## Usage Instructions: Phase 1 (Local Bootstrap)
