@@ -1,0 +1,14 @@
+{
+  "enabledPlugins": {
+    "way-of-working@claude-workbench": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-workbench": {
+      "source": {
+        "source": "github",
+        "repo": "glunk-works/claude-workbench",
+        "ref": "v0.15.0"
+      }
+    }
+  }
+}

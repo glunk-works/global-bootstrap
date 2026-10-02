@@ -1,0 +1,58 @@
+# .ai/project.yml -- global-bootstrap's parameterization of the `way-of-working` plugin.
+# Contract: `reference/project-schema.md` inside the plugin. Values describe this repo as it
+# is on 2026-10-02; a change to one of these facts updates this file in the same PR.
+# This repo has no CLAUDE.md, roadmap, decision log, threat model, CI workflows or branch
+# ruleset as of this date. `null` below records that. The schema does not yet allow `null`
+# for roadmap, sprints_dir, threat_model, decisions.* or ruleset.name
+# (`schema-complete.sh check` reports them invalid), so this file is INCOMPLETE until the
+# repo creates those records or the schema gains a null form. Never invent a path to satisfy it.
+
+repo: glunk-works/global-bootstrap
+pr_base: main
+migration_base: null
+
+roadmap: null
+sprints_dir: null
+threat_model: null
+
+planning:
+  kind: github_milestones
+
+decisions:
+  log: null
+  prefix: null
+
+backlog:
+  kind: github_issues
+  repo: null
+  path: null
+  item_prefix: null
+
+load_bearing_docs:
+  - README.md
+
+# Applied by hand with `tofu apply`; IAM and OIDC trust policies decide what every other
+# repo's CI may do in AWS, so every .tf file is a behavior change.
+code_paths:
+  - "*.tf"
+
+# `-backend=false` so validate needs no AWS credentials.
+gates:
+  green:
+    - { run: tofu fmt -check -recursive }
+    - { run: "tofu init -backend=false && tofu validate" }
+
+ruleset:
+  name: null
+  rule_types: []
+  required_checks: []
+
+review:
+  ci_gate: null
+
+agents:
+  enabled: [architect, coder, security-critic, docs-consistency]
+models:
+  architect: opus
+  coder: sonnet
+  second_opinion: fable
