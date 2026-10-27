@@ -5,89 +5,25 @@
 # ==============================================================================
 
 # ---------------------------------------------------------
-# 1. Bounty Infra (Zero-Trust Fargate Scanner)
+# 1. Bounty Infra (per-scan Vultr VM; AWS is control plane only)
 # ---------------------------------------------------------
+# Narrowed 2026-10-27 (bounty-infra #181). SE (BI-D5) moved scan compute to
+# per-scan Vultr VMs, and its teardown apply left bounty-infra's state holding
+# no aws_ resources, so the Fargate-era network/ECS/ECR/Logs/IAM grants this
+# policy carried had nothing left to manage. What the role still does:
+# - deploy-infra.yml applies infra/, which manages only Vultr resources, and
+#   reads/writes bounty-infra's state -- that is pipeline_state_policy (main.tf),
+#   not this policy;
+# - run-scan.yml reads tofu outputs from the same state, then chains into
+#   bounty-scanner-s3-writer -- the one statement below.
+# Do not re-add an AWS resource grant here without an AWS resource in infra/ to
+# justify it: that would be reintroducing exactly what SE retired (BI-D5).
 resource "aws_iam_policy" "bounty_infra_policy" {
   name        = "glunk-works-bounty-infra-workload"
-  description = "Strict least-privilege permissions for the bounty-infra pipeline"
+  description = "Least-privilege permissions for the bounty-infra pipeline: chaining into the scanner writer only"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          # Network Provisioning
-          "ec2:CreateVpc", "ec2:DeleteVpc", "ec2:DescribeVpcs", "ec2:ModifyVpcAttribute",
-          "ec2:DescribeVpcAttribute", "ec2:CreateSubnet", "ec2:DeleteSubnet", "ec2:DescribeSubnets", "ec2:ModifySubnetAttribute",
-          "ec2:CreateInternetGateway", "ec2:AttachInternetGateway", "ec2:DetachInternetGateway", "ec2:DeleteInternetGateway",
-          "ec2:DescribeInternetGateways", "ec2:CreateRouteTable", "ec2:DeleteRouteTable", "ec2:DescribeRouteTables",
-          "ec2:CreateRoute", "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable",
-          "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup", "ec2:DescribeSecurityGroups",
-          "ec2:AuthorizeSecurityGroupEgress", "ec2:RevokeSecurityGroupEgress",
-          # bounty-infra SE Phase 2: tearing down the VPC/subnet/SG for the
-          # first time (nothing had ever deleted them before) surfaced that
-          # the AWS provider calls DescribeNetworkInterfaces as a safety
-          # check before it will delete a security group or subnet, to
-          # detach/force-delete any ENI still attached first -- a call this
-          # policy never needed for CREATE. DeleteNetworkInterface travels
-          # with it so that check can actually clear a stray ENI, not just
-          # observe one.
-          "ec2:DescribeNetworkInterfaces", "ec2:DeleteNetworkInterface",
-          "ec2:CreateTags", "ec2:DeleteTags",
-
-          # ECS / Fargate Compute
-          "ecs:CreateCluster", "ecs:DeleteCluster", "ecs:DescribeClusters",
-          "ecs:RegisterTaskDefinition", "ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition",
-          "ecs:RunTask",
-
-          # ECR (Container Registry & Image Pushes)
-          "ecr:CreateRepository", "ecr:DeleteRepository", "ecr:DescribeRepositories",
-          "ecr:ListTagsForResource", "ecr:PutImageTagMutability",
-          "ecr:GetAuthorizationToken", "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer", "ecr:GetRepositoryPolicy", "ecr:ListImages",
-          "ecr:DescribeImages", "ecr:BatchGetImage", "ecr:InitiateLayerUpload",
-          "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage",
-
-          # CloudWatch Logs
-          "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:DescribeLogGroups",
-          "logs:ListTagsForResource", "logs:PutRetentionPolicy",
-
-          # IAM Policy Management (Required to construct container Execution/Task roles)
-          "iam:PassRole", "iam:CreateRole", "iam:DeleteRole",
-          "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRole",
-          "iam:GetRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy",
-          "iam:CreatePolicy", "iam:DeletePolicy", "iam:GetPolicy",
-          "iam:GetPolicyVersion", "iam:ListPolicyVersions", "iam:ListInstanceProfilesForRole",
-          "iam:ListRolePolicies", "iam:ListAttachedRolePolicies"
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "AllowECSTaskExecutionAndMonitoring"
-        Effect = "Allow"
-        Action = [
-          "ecs:RunTask",
-          "ecs:DescribeTasks",
-          "ecs:StopTask"
-        ]
-        # Scoped down to your cluster and task definitions for security
-        Resource = [
-          "arn:aws:ecs:*:*:task-definition/bounty-scanner-task:*",
-          "arn:aws:ecs:*:*:task-definition/bounty-scanner-task",
-          "arn:aws:ecs:*:*:cluster/bounty-scanner-cluster",
-          "arn:aws:ecs:*:*:task/bounty-scanner-cluster/*"
-        ]
-      },
-      {
-        Sid    = "AllowPassingExecutionAndTaskRoles"
-        Effect = "Allow"
-        Action = "iam:PassRole"
-        # The actions role must be able to pass these roles to the ECS service
-        Resource = [
-          "arn:aws:iam::*:role/*-ecs-execution-role",
-          "arn:aws:iam::*:role/*-ecs-task-role"
-        ]
-      },
       {
         # SE (bounty-infra sprints/SE_egress_migration, BI-D5/SE-MG2):
         # run-scan.yml chains into bounty-scanner-s3-writer for the per-scan
