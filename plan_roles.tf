@@ -107,50 +107,25 @@ resource "aws_iam_role_policy" "plan_state_read_policy" {
 # Lives here rather than in project_policies.tf so that everything about the
 # plan identity is readable in one place.
 #
-# The Describe/List/Get actions below have no resource-level scoping in IAM, so
-# `Resource = "*"` is unavoidable — the containment comes from the action list
-# being read-only and from the explicit Deny at the end.
+# Narrowed 2026-10-27 (bounty-infra #181), in step with the workload policy:
+# bounty-infra's state holds no aws_ resources, so `tofu plan` refreshes none
+# and the Describe/List/Get mirror of the retired Fargate resources is gone.
+# The plan role's state read is plan_state_read_policy above, not this policy.
+# Only the Deny remains -- kept deliberately, so a later Allow cannot open the
+# findings archive to a PR-triggered role.
 resource "aws_iam_policy" "bounty_infra_plan_policy" {
   name        = "glunk-works-bounty-infra-plan-readonly"
-  description = "Read-only permissions for bounty-infra PR-time tofu plan"
+  description = "bounty-infra PR-time tofu plan: findings-archive Deny only"
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "AllowReadOfManagedResources"
-        Effect = "Allow"
-        Action = [
-          # Network (aws_vpc, aws_subnet, aws_internet_gateway,
-          # aws_route_table[_association], aws_security_group)
-          "ec2:DescribeVpcs", "ec2:DescribeVpcAttribute", "ec2:DescribeSubnets",
-          "ec2:DescribeInternetGateways", "ec2:DescribeRouteTables",
-          "ec2:DescribeSecurityGroups", "ec2:DescribeSecurityGroupRules",
-          "ec2:DescribeNetworkAcls", "ec2:DescribeAvailabilityZones", "ec2:DescribeTags",
-
-          # ECS (aws_ecs_cluster, aws_ecs_task_definition)
-          "ecs:DescribeClusters", "ecs:DescribeTaskDefinition", "ecs:ListTagsForResource",
-
-          # ECR (aws_ecr_repository)
-          "ecr:DescribeRepositories", "ecr:ListTagsForResource",
-          "ecr:GetRepositoryPolicy", "ecr:GetLifecyclePolicy",
-
-          # CloudWatch Logs (aws_cloudwatch_log_group)
-          "logs:DescribeLogGroups", "logs:ListTagsForResource",
-
-          # IAM (aws_iam_role x2, aws_iam_policy, the attachments)
-          "iam:GetRole", "iam:GetRolePolicy", "iam:ListRolePolicies",
-          "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole",
-          "iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions"
-        ]
-        Resource = "*"
-      },
-      {
         # Belt and braces for BI-D4. `tofu plan` never touches the findings
         # archive — it only interpolates the bucket NAME into a policy document
         # — so denying it outright costs nothing and makes it structurally
         # impossible for a PR-triggered role to read third-party vulnerability
-        # data, even if a later edit widens the Allow above.
+        # data, even if a later edit adds an Allow here.
         Sid    = "DenyBountyFindingsDataAccess"
         Effect = "Deny"
         Action = "s3:*"
