@@ -114,8 +114,11 @@ resource "aws_iam_role_policy" "plan_state_read_policy" {
 # Only the Deny remains -- kept deliberately, so a later Allow cannot open the
 # findings archive to a PR-triggered role.
 resource "aws_iam_policy" "bounty_infra_plan_policy" {
+  # Leave the description as is: changing it forces replacement of an aws_iam_policy
+  # (detach, delete, recreate, losing its version history), unlike a policy-document
+  # change, which updates in place. #31 learned this.
   name        = "glunk-works-bounty-infra-plan-readonly"
-  description = "bounty-infra PR-time tofu plan: findings-archive Deny only"
+  description = "Read-only permissions for bounty-infra PR-time tofu plan"
 
   policy = jsonencode({
     Version = "2012-10-17"

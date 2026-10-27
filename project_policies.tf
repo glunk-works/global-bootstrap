@@ -19,8 +19,11 @@
 # Do not re-add an AWS resource grant here without an AWS resource in infra/ to
 # justify it: that would be reintroducing exactly what SE retired (BI-D5).
 resource "aws_iam_policy" "bounty_infra_policy" {
+  # Leave the description as is: changing it forces replacement of an aws_iam_policy
+  # (detach, delete, recreate, losing its version history), unlike a policy-document
+  # change, which updates in place. #31 learned this.
   name        = "glunk-works-bounty-infra-workload"
-  description = "Least-privilege permissions for the bounty-infra pipeline: chaining into the scanner writer only"
+  description = "Strict least-privilege permissions for the bounty-infra pipeline"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
