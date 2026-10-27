@@ -44,10 +44,18 @@ variable "projects" {
     # the same computed prefix. The plan role otherwise trusts only
     # ":pull_request", so a project whose plan-on-push job needs to run (e.g.
     # a push-triggered tofu-plan-main) must list that context here.
-    # plan_roles.tf concatenates these onto the hardcoded ":pull_request"
-    # subject: they can add to the plan role's trust, never remove that base
-    # subject (BR-D27, F56 gap a).
+    # plan_roles.tf concatenates these onto the ":pull_request" subject: they
+    # add to the plan role's trust and never remove it (BR-D27, F56 gap a).
+    # Dropping ":pull_request" is plan_trusts_pull_request below.
     extra_plan_oidc_subjects = optional(list(string), [])
+
+    # Whether the plan role trusts the bare ":pull_request" subject. true (the
+    # default) keeps every existing project's trust byte-for-byte. A project
+    # sets false once its PR-time plan job runs behind a required-reviewer
+    # Environment and that Environment's subject is in extra_plan_oidc_subjects:
+    # then ":pull_request" would only let a PR's own copy of a workflow assume
+    # the role with no approval (bounty-infra #179, BI-D23).
+    plan_trusts_pull_request = optional(bool, true)
 
     # Override for the computed subject prefix ("repo:<org>/<repo_name>").
     # An org-owned repo can present an ID-QUALIFIED subject instead of the
@@ -83,13 +91,12 @@ variable "projects" {
       plan_role = true
       # deploy-infra.yml's apply job runs `environment: production`.
       extra_oidc_subjects = ["environment:production"]
-      # plan-infra.yml's credentialed plan job moves behind `environment: infra-plan`, a
-      # required-reviewer Environment (bounty-infra #179), so it will present this subject
-      # instead of ":pull_request". Trusted here BEFORE that workflow change merges, so the
-      # job is never left presenting a subject the role rejects. ":pull_request" is still
-      # trusted until a later change removes it; that removal is the control, since a PR's
-      # run uses the PR's own copy of the workflow and could drop the `environment:` line.
+      # plan-infra.yml's credentialed plan job runs behind `environment: infra-plan`, a
+      # required-reviewer Environment (bounty-infra #179, BI-D23), so this is the only
+      # subject the plan role trusts. ":pull_request" is dropped: a PR's run uses the PR's
+      # own copy of the workflow, so trusting it would let a PR assume the role unapproved.
       extra_plan_oidc_subjects = ["environment:infra-plan"]
+      plan_trusts_pull_request = false
     }
 
     # Re-added per S2-T0c, per ST Task 2b's normative spec. NOT a bare re-add of the F45/F42
@@ -112,6 +119,17 @@ variable "projects" {
       # nothing that `:pull_request` did not already cost.
       extra_plan_oidc_subjects = ["ref:refs/heads/main"]
     }
+  }
+
+  # A plan role must trust at least one subject: opting out of ":pull_request" with no
+  # extra subject would leave a role nothing can assume, which is a misconfiguration,
+  # not a lockdown.
+  validation {
+    condition = alltrue([
+      for k, v in var.projects :
+      !v.plan_role || v.plan_trusts_pull_request || length(v.extra_plan_oidc_subjects) > 0
+    ])
+    error_message = "A project with plan_role = true and plan_trusts_pull_request = false must list at least one extra_plan_oidc_subjects entry."
   }
 
   # Mirrors bootstrap/oidc-setup.tf's validations for github_oidc_subject_prefixes.

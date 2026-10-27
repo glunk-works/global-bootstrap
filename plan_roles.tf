@@ -55,8 +55,10 @@ resource "aws_iam_role" "github_actions_plan_role" {
             # condition value as a set, so the two are equivalent -- this exists so a
             # project can also trust a push-triggered plan job (extra_plan_oidc_subjects,
             # F56 gap a), e.g. "ref:refs/heads/main" for a push-triggered tofu-plan-main.
+            # ":pull_request" unless the project opts out (plan_trusts_pull_request),
+            # which a project does once its PR plan runs behind an approval Environment.
             "token.actions.githubusercontent.com:sub" = concat(
-              ["${local.subject_prefix[each.key]}:pull_request"],
+              each.value.plan_trusts_pull_request ? ["${local.subject_prefix[each.key]}:pull_request"] : [],
               [for s in each.value.extra_plan_oidc_subjects : "${local.subject_prefix[each.key]}:${s}"]
             )
           }
