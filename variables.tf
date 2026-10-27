@@ -43,9 +43,10 @@ variable "projects" {
     # Extra OIDC subject suffixes the PLAN role will also trust, appended to
     # the same computed prefix. The plan role otherwise trusts only
     # ":pull_request", so a project whose plan-on-push job needs to run (e.g.
-    # a push-triggered tofu-plan-main) must list that context here. Declared
-    # here; NOT YET consumed — plan_roles.tf still hardcodes ":pull_request"
-    # until that is wired up separately (BR-D27, F56 gap a).
+    # a push-triggered tofu-plan-main) must list that context here.
+    # plan_roles.tf concatenates these onto the hardcoded ":pull_request"
+    # subject: they can add to the plan role's trust, never remove that base
+    # subject (BR-D27, F56 gap a).
     extra_plan_oidc_subjects = optional(list(string), [])
 
     # Override for the computed subject prefix ("repo:<org>/<repo_name>").
@@ -82,6 +83,13 @@ variable "projects" {
       plan_role = true
       # deploy-infra.yml's apply job runs `environment: production`.
       extra_oidc_subjects = ["environment:production"]
+      # plan-infra.yml's credentialed plan job moves behind `environment: infra-plan`, a
+      # required-reviewer Environment (bounty-infra #179), so it will present this subject
+      # instead of ":pull_request". Trusted here BEFORE that workflow change merges, so the
+      # job is never left presenting a subject the role rejects. ":pull_request" is still
+      # trusted until a later change removes it; that removal is the control, since a PR's
+      # run uses the PR's own copy of the workflow and could drop the `environment:` line.
+      extra_plan_oidc_subjects = ["environment:infra-plan"]
     }
 
     # Re-added per S2-T0c, per ST Task 2b's normative spec. NOT a bare re-add of the F45/F42
