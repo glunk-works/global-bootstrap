@@ -39,7 +39,7 @@ code_paths:
 gates:
   green:
     - { run: tofu fmt -check -recursive }
-    - { run: "tofu init -backend=false && tofu validate" }
+    - { run: "tofu -chdir=infra init -backend=false && tofu -chdir=infra validate" }
 
 ruleset:
   name: null

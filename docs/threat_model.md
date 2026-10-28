@@ -32,7 +32,7 @@ a behavior change, applied by hand with `tofu apply`.
 | PR-time or scanner role reads findings | Explicit Deny on findings bucket and key | The bounty-infra plan role's own inline Deny covers `s3:` only (tracked in #6) |
 | Scanner VM tampers with RoE data | Chained role, Deny on `PutObject` to `roe/*`, per-scan session policy | Depends on the session policy staying in the consuming repo |
 | Plan role reads plaintext state | `encryption {}` planned per consumer (GB-D7) | Not wired for any project yet |
-| Cross-repo literal drift (collection, budget, role path) | Documented in `project_policies.tf` | Surfaces as AccessDenied at apply, not at plan |
+| Cross-repo literal drift (collection, budget, role path) | Documented in `infra/project_policies.tf` | Surfaces as AccessDenied at apply, not at plan |
 
 ## Out of scope
 

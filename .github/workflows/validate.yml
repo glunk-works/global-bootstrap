@@ -17,4 +17,5 @@ jobs:
       - name: Format check
         run: tofu fmt -check -recursive
       - name: Validate
+        working-directory: infra
         run: tofu init -backend=false && tofu validate

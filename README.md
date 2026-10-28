@@ -33,13 +33,13 @@ Because this repository manages the state storage for the entire organization, i
 3. Initialize the OpenTofu directory:
 
    ```bash
-   tofu init
+   tofu -chdir=infra init
    ```
 
 4. Review the plan and apply, providing the required variables:
 
    ```bash
-   tofu apply -var="bootstrap_bucket_name=glunk-works-tofu-state-12345" -var="github_organization=glunk-works"
+   tofu -chdir=infra apply -var="bootstrap_bucket_name=glunk-works-tofu-state-12345" -var="github_organization=glunk-works"
    ```
 
 **Important:** The S3 bucket name must be globally unique across all of AWS.
@@ -50,7 +50,7 @@ Because this repository manages the state storage for the entire organization, i
 
 Once the initial `tofu apply` is successful, your state file is sitting locally on your machine. You must migrate it to the newly created S3 bucket to ensure it is backed up and encrypted.
 
-1. In the root of this repository, create a new file named `backend.tf`.
+1. In this repository, create a new file named `infra/backend.tf`.
 2. Add the following configuration, replacing the bucket name with the exact name you provided in Phase 1:
 
    ```hcl
@@ -68,11 +68,11 @@ Once the initial `tofu apply` is successful, your state file is sitting locally 
 3. Run the initialization command again to trigger the migration:
 
    ```bash
-   tofu init
+   tofu -chdir=infra init
    ```
 
 4. OpenTofu will detect the new backend and ask: *"Do you want to copy existing state to the new backend?"* Type `yes`.
-5. Once complete, you may safely delete the local `terraform.tfstate` file.
+5. Once complete, you may safely delete the local `infra/terraform.tfstate` file.
 
 ---
 
@@ -84,9 +84,9 @@ To connect your application repositories (e.g., `tri-loop-dev`, `resume-optimize
 
 Before a pipeline can run, it must be authorized.
 
-1. Open `variables.tf` in this repository.
+1. Open `infra/variables.tf` in this repository.
 2. Add a new block to the `projects` map specifying the repository name and the strictly allowed IAM actions.
-3. Run `tofu apply` locally to generate the new IAM Role.
+3. Run `tofu -chdir=infra apply` locally to generate the new IAM Role.
 4. Note the generated Role ARN from the output.
 
 ### 2. Application `backend.tf`
