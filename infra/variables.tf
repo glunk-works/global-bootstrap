@@ -66,9 +66,6 @@ variable "projects" {
     oidc_subject_prefix = optional(string, null)
   }))
   default = {
-    "tri-loop-dev"     = { repo_name = "tri-loop-dev" }
-    "resume-optimizer" = { repo_name = "resume-optimizer" }
-
     # NOTE: "bedrock-serverless-rag" is deliberately ABSENT -- do not re-add it here.
     #
     # That repo is about to transfer into this organization. Its entry generated a CI role

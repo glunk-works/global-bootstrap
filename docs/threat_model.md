@@ -28,7 +28,7 @@ a behavior change, applied by hand with `tofu apply`.
 | PR gains apply-capable credentials | Separate read-only plan role, `:pull_request` only | None known |
 | Wildcard in a trust subject globs past the principal | `StringEquals`, no wildcards rendered | `extra_oidc_subjects` is unvalidated input |
 | Transferred or renamed repo makes a dormant role assumable | Dormant roles removed (GB-D4) | Any entry in `var.projects` for a repo not yet in the org |
-| CI role escalates via IAM | Permissions boundary, role-path scope, `iam:PermissionsBoundary` condition (bedrock-rag only) | `UpdateAssumeRolePolicy` can still rewrite trust; tri-loop-dev and resume-optimizer still hold `iam:*Role*` on `*` |
+| CI role escalates via IAM | Permissions boundary, role-path scope, `iam:PermissionsBoundary` condition (bedrock-rag only) | `UpdateAssumeRolePolicy` can still rewrite trust |
 | PR-time or scanner role reads findings | Explicit Deny on findings bucket and key | The bounty-infra plan role's own inline Deny covers `s3:` only (tracked in #6) |
 | Scanner VM tampers with RoE data | Chained role, Deny on `PutObject` to `roe/*`, per-scan session policy | Depends on the session policy staying in the consuming repo |
 | Plan role reads plaintext state | `encryption {}` planned per consumer (GB-D7) | Not wired for any project yet |

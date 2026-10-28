@@ -60,8 +60,8 @@ resource "aws_dynamodb_table" "state_locks" {
 # reasoning is that SSE-S3/SSE-KMS does not protect a state file from anyone who can
 # legitimately `s3:GetObject` it -- which includes a plan role assumable from any pull
 # request -- so flipping `state_encryption` above to SSE-KMS would not deliver the control
-# BR-D22 asks for, AND would break every sibling project's plan (tri-loop-dev,
-# resume-optimizer, bounty-infra hold no `kms:` grant anywhere) the moment it landed. This PR
+# BR-D22 asks for, AND would break every sibling project's plan (bounty-infra holds no `kms:`
+# grant anywhere) the moment it landed. This PR
 # only creates the key and grants bedrock-serverless-rag's two roles `kms:Decrypt`/
 # `GenerateDataKey`/`DescribeKey` on it, so the grant exists before whichever later change adds
 # bedrock-serverless-rag's own `encryption {}` block (and, separately, migrates its state under

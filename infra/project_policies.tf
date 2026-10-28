@@ -49,35 +49,6 @@ resource "aws_iam_role_policy_attachment" "bounty_infra_attach" {
 }
 
 # ---------------------------------------------------------
-# 2. Tri-Loop Dev
-# ---------------------------------------------------------
-resource "aws_iam_policy" "tri_loop_policy" {
-  name        = "glunk-works-tri-loop-workload"
-  description = "Permissions for the Tri-Loop application pipeline"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ecs:*", "ecr:*", "ssm:GetParameter", "ssm:GetParameters", "rds:*",
-          # Standard IAM workload management capabilities
-          "iam:PassRole", "iam:CreateRole", "iam:DeleteRole", "iam:PutRolePolicy",
-          "iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy",
-          "iam:AttachRolePolicy", "iam:DetachRolePolicy"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "tri_loop_attach" {
-  role       = aws_iam_role.github_actions_role["tri-loop-dev"].name
-  policy_arn = aws_iam_policy.tri_loop_policy.arn
-}
-
-# ---------------------------------------------------------
 # 3. Bedrock Serverless RAG -- REMOVED, deliberately. Do not re-add here.
 # ---------------------------------------------------------
 # `aws_iam_policy.bedrock_rag_policy` and its attachment lived here, and the matching entry
@@ -103,38 +74,6 @@ resource "aws_iam_role_policy_attachment" "tri_loop_attach" {
 #
 # The section numbering below is left alone on purpose: renumbering would churn every
 # following block and hide this one-block diff.
-#
-# The same `Resource = "*"` IAM grant is present in the sibling policies below. Deleting
-# this one does NOT fix the pattern -- see the linked issue.
-
-# ---------------------------------------------------------
-# 4. Resume Optimizer
-# ---------------------------------------------------------
-resource "aws_iam_policy" "resume_optimizer_policy" {
-  name        = "glunk-works-resume-optimizer-workload"
-  description = "Permissions for the Resume Optimizer pipeline"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "lambda:*", "s3:*",
-          # Standard IAM workload management capabilities
-          "iam:PassRole", "iam:CreateRole", "iam:DeleteRole", "iam:PutRolePolicy",
-          "iam:DeleteRolePolicy", "iam:GetRole", "iam:GetRolePolicy",
-          "iam:AttachRolePolicy", "iam:DetachRolePolicy"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "resume_optimizer_attach" {
-  role       = aws_iam_role.github_actions_role["resume-optimizer"].name
-  policy_arn = aws_iam_policy.resume_optimizer_policy.arn
-}
 
 # ---------------------------------------------------------
 # 5. Bedrock Serverless RAG (S2-T0c, re-added per ST Task 2b's normative spec)
