@@ -7,7 +7,7 @@ DRAFT, 2026-10-02: written from the repo's git history. Review and correct befor
 | Area | Status | Notes |
 |---|---|---|
 | State backend (S3 + DynamoDB lock) | Done | Applied locally, state migrated to S3 |
-| GitHub OIDC apply roles, one per project | Done | `var.projects` in `variables.tf` |
+| GitHub OIDC apply roles, one per project | Done | `var.projects` in `infra/variables.tf` |
 | Read-only PR-time plan roles | Done | bounty-infra and bedrock-serverless-rag opted in |
 | bedrock-serverless-rag identity (S2-T0c) | Merged, not applied | Human apply upstream |
 | State encryption key (BR-D22) | Key created, not wired | Consumers add their own `encryption {}` block |
