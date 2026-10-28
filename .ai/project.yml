@@ -1,10 +1,8 @@
 # .ai/project.yml -- global-bootstrap's parameterization of the `way-of-working` plugin.
 # Contract: `reference/project-schema.md` inside the plugin. Values describe this repo as it
 # is on 2026-10-02; a change to one of these facts updates this file in the same PR.
-# This repo has no CLAUDE.md, CI workflows or branch ruleset as of this date. `null` on
-# ruleset.name records that: the schema does not yet allow `null` there
-# (`schema-complete.sh check` reports it invalid), so this file stays INCOMPLETE until the repo
-# adds a ruleset. Never invent a name to satisfy it.
+# As of 2026-10-28 the repo has a CI workflow (`validate`) and one active ruleset on main,
+# `protected-integration-branches`, which `ruleset` below mirrors; it has no CLAUDE.md.
 
 repo: glunk-works/global-bootstrap
 pr_base: main
@@ -31,9 +29,9 @@ load_bearing_docs:
   - README.md
 
 # Applied by hand with `tofu apply`; IAM and OIDC trust policies decide what every other
-# repo's CI may do in AWS, so every .tf file is a behavior change.
+# repo's CI may do in AWS, so every file under infra/ is a behavior change.
 code_paths:
-  - "*.tf"
+  - infra/
 
 # `-backend=false` so validate needs no AWS credentials.
 gates:
@@ -42,16 +40,21 @@ gates:
     - { run: "tofu -chdir=infra init -backend=false && tofu -chdir=infra validate" }
 
 ruleset:
-  name: null
-  rule_types: []
-  required_checks: []
+  name: protected-integration-branches
+  rule_types: [deletion, non_fast_forward, pull_request, required_status_checks]
+  required_checks: [validate]
 
 review:
   ci_gate: null
 
 agents:
   enabled: [architect, coder, security-critic, docs-consistency]
+  diff_rule: null
 models:
   architect: opus
   coder: sonnet
   second_opinion: fable
+
+orchestration: null
+# The cutover's PR 1 (claude-workbench#407) replaces identities with a map.
+identities: null
