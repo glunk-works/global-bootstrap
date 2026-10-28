@@ -1,8 +1,8 @@
 # .ai/project.yml -- global-bootstrap's parameterization of the `way-of-working` plugin.
 # Contract: `reference/project-schema.md` inside the plugin. Values describe this repo as it
 # is on 2026-10-02; a change to one of these facts updates this file in the same PR.
-# As of 2026-10-28 the repo has a CI workflow (`validate`) and one active ruleset on main,
-# `protected-integration-branches`, which `ruleset` below mirrors; it has no CLAUDE.md.
+# As of 2026-10-28 the repo has a CI workflow (`validate`) and two active rulesets on main,
+# `main-required-checks` (checks) and `protected-integration-branches` (approval); it has no CLAUDE.md.
 
 repo: glunk-works/global-bootstrap
 pr_base: main
@@ -40,12 +40,25 @@ gates:
     - { run: "tofu -chdir=infra init -backend=false && tofu -chdir=infra validate" }
 
 ruleset:
-  name: protected-integration-branches
-  rule_types: [deletion, non_fast_forward, pull_request, required_status_checks]
-  required_checks: [validate]
+  name: main-required-checks
+  rule_types: [required_status_checks]
+  required_checks: [validate, architect-review]
+
+rulesets:
+  - name: main-required-checks
+    source: repo
+    rule_types: [required_status_checks]
+    required_checks: [validate, architect-review]
+  - name: protected-integration-branches
+    source: repo
+    rule_types: [deletion, non_fast_forward, pull_request]
 
 review:
-  ci_gate: null
+  ci_gate:
+    check: architect-review
+    header: "**Opus/Architect review (automated)**"
+    attestation: "*Fresh-session review: this session did not author the diff.*"
+    triggers_on: null # null means code_paths; a PR touching nothing under code_paths is not gated.
 
 agents:
   enabled: [architect, coder, security-critic, docs-consistency]
@@ -56,5 +69,9 @@ models:
   second_opinion: fable
 
 orchestration: null
-# The cutover's PR 1 (claude-workbench#407) replaces identities with a map.
-identities: null
+identities:
+  maintainer:
+    - {login: Seuss27, id: 22668449}
+  dev_app: {login: "glunk-dev[bot]", id: 339840170}
+  reviewer_app: {login: "glunk-review[bot]", id: 339841158}
+  loop_app: {login: "glunk-loop[bot]", id: 338193635}
