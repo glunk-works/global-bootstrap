@@ -1,3 +1,6 @@
+# State lives at bootstrap/global-bootstrap.tfstate regardless of where this module sits in
+# the repo: the S3 backend locates state by bucket and key, not by path. The module moved from
+# the repo root into infra/ in #35 with no state change (`tofu -chdir=infra plan`: No changes).
 terraform {
   backend "s3" {
     bucket         = "glunk-works-tofu-state-00042"
