@@ -40,6 +40,13 @@ variable "projects" {
     # Environment presents `environment:<name>` INSTEAD OF the branch subject.
     extra_oidc_subjects = optional(list(string), [])
 
+    # Whether the apply role trusts the branch subject ":ref:refs/heads/main". true (the
+    # default) keeps every existing project's trust byte-for-byte. A project sets false once
+    # every job that assumes its apply role runs under an Environment listed in
+    # extra_oidc_subjects: then the branch subject only lets a job on main that names no
+    # Environment assume the role without that Environment's approval (GB-D9).
+    apply_trusts_main = optional(bool, true)
+
     # Extra OIDC subject suffixes the PLAN role will also trust, appended to
     # the same computed prefix. The plan role otherwise trusts only
     # ":pull_request", so a project whose plan-on-push job needs to run (e.g.
@@ -90,6 +97,9 @@ variable "projects" {
       # execute-scan job runs `environment: scan`, a required-reviewer Environment
       # limited to main (GB-D8).
       extra_oidc_subjects = ["environment:production", "environment:scan"]
+      # Both jobs that assume the apply role run under those Environments, so the branch
+      # subject is not trusted (GB-D9).
+      apply_trusts_main = false
       # plan-infra.yml's credentialed plan job runs behind `environment: infra-plan`, a
       # required-reviewer Environment (bounty-infra #179, BI-D23), so this is the only
       # subject the plan role trusts. ":pull_request" is dropped: a PR's run uses the PR's
@@ -121,6 +131,16 @@ variable "projects" {
       extra_plan_oidc_subjects = ["ref:refs/heads/main", "environment:pr-plan"]
       plan_trusts_pull_request = false
     }
+  }
+
+  # An apply role must trust at least one subject: dropping the branch subject with no
+  # Environment subject would leave a role nothing can assume.
+  validation {
+    condition = alltrue([
+      for k, v in var.projects :
+      v.apply_trusts_main || length(v.extra_oidc_subjects) > 0
+    ])
+    error_message = "A project with apply_trusts_main = false must list at least one extra_oidc_subjects entry."
   }
 
   # A plan role must trust at least one subject: opting out of ":pull_request" with no

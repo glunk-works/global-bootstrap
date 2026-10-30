@@ -154,11 +154,12 @@ resource "aws_iam_role" "github_actions_role" {
             # branch subject: the environment filter takes precedence, so the
             # subject becomes `...:environment:<name>` and this role would
             # reject it. A project gating a deploy behind an Environment must
-            # therefore list that subject in `extra_oidc_subjects` — an
-            # addition, not a replacement, because sibling workflows on the same
-            # role (image build, scan dispatch) still present the branch subject.
+            # therefore list that subject in `extra_oidc_subjects`. The branch
+            # subject stays trusted unless the project sets apply_trusts_main =
+            # false, once none of its jobs on this role runs outside an
+            # Environment (GB-D9).
             "token.actions.githubusercontent.com:sub" = concat(
-              ["${local.subject_prefix[each.key]}:ref:refs/heads/main"],
+              each.value.apply_trusts_main ? ["${local.subject_prefix[each.key]}:ref:refs/heads/main"] : [],
               [for s in each.value.extra_oidc_subjects : "${local.subject_prefix[each.key]}:${s}"]
             )
           }

@@ -56,3 +56,12 @@ The plan role gets neither. The apply role also trusts `environment:scan`, a req
 Environment limited to `main`, for run-scan.yml's execute-scan job. Non-secret configuration (role
 ARNs, bucket and table names) and the operator IP, which changes with the operator's address,
 stay in that repo's GitHub Environment secrets.
+
+## GB-D9: The apply role's branch subject is optional per project (#72)
+
+`apply_trusts_main` (default `true`) controls whether a project's apply role trusts
+`:ref:refs/heads/main`. This is GB-D2's follow-up: a project whose apply-role jobs all run under
+Environments drops the branch subject, so the role is reachable only through those Environments'
+approvals. A validation refuses an apply role left with no subject. bounty-infra sets `false`:
+its apply job runs under `production` and its scan job under `scan`; no other workflow there
+assumes the role.
