@@ -25,7 +25,7 @@ a behavior change, applied by hand with `tofu apply`.
 
 | Threat | Control | Residual |
 |---|---|---|
-| PR gains apply-capable credentials | Separate read-only plan role, `:pull_request` only | None known |
+| PR gains apply-capable credentials | Separate read-only plan role, trusting `:pull_request` unless the project sets `plan_trusts_pull_request = false`, plus its `extra_plan_oidc_subjects`. bounty-infra and bedrock-serverless-rag trust Environment subjects behind required-reviewer Environments (and bedrock-serverless-rag also the `main` ref) instead of `:pull_request` | None known |
 | Wildcard in a trust subject globs past the principal | `StringEquals`, no wildcards rendered | `extra_oidc_subjects` is unvalidated input |
 | Transferred or renamed repo makes a dormant role assumable | Dormant roles removed (GB-D4) | Any entry in `var.projects` for a repo not yet in the org |
 | CI role escalates via IAM | Permissions boundary, role-path scope, `iam:PermissionsBoundary` condition (bedrock-rag only) | `UpdateAssumeRolePolicy` can still rewrite trust |
