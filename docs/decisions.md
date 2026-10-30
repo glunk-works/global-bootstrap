@@ -47,11 +47,12 @@ repo so it outlives any project's destroy cycles. The plan role holds `Decrypt` 
 
 ## GB-D8: bounty-infra's secrets live in SSM Parameter Store, read only by its apply role (#58)
 
-bounty-infra's three secret values are `SecureString` parameters under `/bounty-infra/`, declared
+bounty-infra's two secret values are `SecureString` parameters under `/bounty-infra/`, declared
 here with write-only values (`value_wo`), so no value is ever in state. They use the AWS-managed
 `aws/ssm` key, not a customer-managed one: the apply role's `ssm:GetParameter`/`ssm:GetParameters` grant is scoped to
 `/bounty-infra/*` and its `kms:Decrypt` to calls made through SSM, and no other CI role in the
 account can read that path, so a dedicated key would add cost without narrowing who can decrypt.
 The plan role gets neither. The apply role also trusts `environment:scan`, a required-reviewer
 Environment limited to `main`, for run-scan.yml's execute-scan job. Non-secret configuration (role
-ARNs, bucket and table names) stays in that repo's GitHub Environment secrets.
+ARNs, bucket and table names) and the operator IP, which changes with the operator's address,
+stay in that repo's GitHub Environment secrets.
