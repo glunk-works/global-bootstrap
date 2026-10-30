@@ -18,9 +18,10 @@
 # value_wo is not an option (the provider refuses the plan), which is why there is no
 # default. CI is unaffected: validate.yml runs fmt and validate only, which need no values.
 #
-# Never declare one of these through `value`, and never use a placeholder `value` with
-# lifecycle { ignore_changes = [value] }: the provider reads the parameter back on refresh,
-# and the real value would land in state.
+# Never declare one of these through `value`, never use a placeholder `value` with
+# lifecycle { ignore_changes = [value] }, and never `tofu import` one (delete and recreate
+# instead): in each case the provider reads the parameter back on refresh, and the real
+# value would land in state.
 
 data "aws_kms_alias" "ssm" {
   name = "alias/aws/ssm"
