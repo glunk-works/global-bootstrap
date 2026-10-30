@@ -111,11 +111,13 @@ variable "projects" {
       oidc_subject_prefix = "repo:glunk-works@295891085/bedrock-serverless-rag@1253604712"
       # deploy.yml's apply job runs `environment: production` (S1a-T5).
       extra_oidc_subjects = ["environment:production"]
-      # Without this, deploy.yml's push-triggered tofu-plan-main can never assume the plan
-      # role at all (F56 gap a) -- it is a READ-ONLY role, so trusting the `main` ref costs
-      # nothing that `:pull_request` did not already cost. `environment:pr-plan` is
-      # trusted ahead of plan.yml's tofu-plan job moving into that repo's pr-plan Environment.
+      # `ref:refs/heads/main` is deploy.yml's push-triggered tofu-plan-main; without it that
+      # job cannot assume the plan role at all (F56 gap a). `environment:pr-plan` is plan.yml's
+      # tofu-plan job, which runs behind `environment: pr-plan`, a required-reviewer
+      # Environment. ":pull_request" is dropped: a PR's run uses the PR's own copy of the
+      # workflow, so trusting it would let a PR assume the role unapproved.
       extra_plan_oidc_subjects = ["ref:refs/heads/main", "environment:pr-plan"]
+      plan_trusts_pull_request = false
     }
   }
 
