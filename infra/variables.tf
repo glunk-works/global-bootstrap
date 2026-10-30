@@ -93,6 +93,11 @@ variable "projects" {
     "bounty-infra" = {
       repo_name = "bounty-infra"
       plan_role = true
+      # The repo presents the immutable, ID-qualified subject
+      # repo:<owner>@<org_id>/<repo>@<repo_id>:<context> (its use_immutable_subject setting),
+      # so a rename or a recreated repo of the same name cannot match (GB-D5). Ids read with
+      # `gh api repos/glunk-works/bounty-infra --jq '.owner.id, .id'`.
+      oidc_subject_prefix = "repo:glunk-works@295891085/bounty-infra@1257336927"
       # deploy-infra.yml's apply job runs `environment: production`; run-scan.yml's
       # execute-scan job runs `environment: scan`, a required-reviewer Environment
       # limited to main (GB-D8).
