@@ -42,7 +42,7 @@ Because this repository manages the state storage for the entire organization, i
    tofu -chdir=infra apply -var="bootstrap_bucket_name=glunk-works-tofu-state-12345" -var="github_organization=glunk-works"
    ```
 
-   Every plan and apply also needs `TF_VAR_bedrock_rag_source_bucket_name` and the three
+   Every plan and apply also needs `TF_VAR_bedrock_rag_source_bucket_name` and the two
    `TF_VAR_bounty_infra_*` secret values, set from a prompt that does not echo; see the header
    of `infra/bounty_infra_secrets.tf`.
 

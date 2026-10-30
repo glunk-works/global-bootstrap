@@ -5,12 +5,15 @@
 # argument (value_wo): OpenTofu sends it to AWS and never stores it in state or a plan.
 # The read grant is on the bounty-infra apply role only (project_policies.tf).
 #
+# The operator IP is not here: it changes with the operator's address, so it is a secret of
+# bounty-infra's scan Environment, updated there without an apply.
+#
 # Supplying the values: the variables have no default, so every host plan and apply of this
-# module asks for all three. Set them from a prompt that does not echo, never from a tfvars
+# module asks for both. Set them from a prompt that does not echo, never from a tfvars
 # file or a CI variable, for example in PowerShell:
 #   $s = Read-Host -AsSecureString 'bounty_infra_vultr_api_key'
 #   $env:TF_VAR_bounty_infra_vultr_api_key = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
-#   ... (the same for the other two) ...
+#   ... (the same for the other one) ...
 #   tofu apply
 #   Remove-Item Env:TF_VAR_bounty_infra_*; Remove-Variable s
 #
@@ -41,13 +44,6 @@ variable "bounty_infra_operator_ssh_key" {
   ephemeral   = true
 }
 
-variable "bounty_infra_operator_ip" {
-  description = "bounty-infra's operator IP, written to /bounty-infra/operator_ip. Write-only: never stored in state."
-  type        = string
-  sensitive   = true
-  ephemeral   = true
-}
-
 resource "aws_ssm_parameter" "bounty_infra_vultr_api_key" {
   name             = "/bounty-infra/vultr_api_key"
   type             = "SecureString"
@@ -59,12 +55,5 @@ resource "aws_ssm_parameter" "bounty_infra_operator_ssh_key" {
   name             = "/bounty-infra/operator_ssh_key"
   type             = "SecureString"
   value_wo         = var.bounty_infra_operator_ssh_key
-  value_wo_version = 1
-}
-
-resource "aws_ssm_parameter" "bounty_infra_operator_ip" {
-  name             = "/bounty-infra/operator_ip"
-  type             = "SecureString"
-  value_wo         = var.bounty_infra_operator_ip
   value_wo_version = 1
 }
