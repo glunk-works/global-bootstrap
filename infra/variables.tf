@@ -113,8 +113,9 @@ variable "projects" {
       extra_oidc_subjects = ["environment:production"]
       # Without this, deploy.yml's push-triggered tofu-plan-main can never assume the plan
       # role at all (F56 gap a) -- it is a READ-ONLY role, so trusting the `main` ref costs
-      # nothing that `:pull_request` did not already cost.
-      extra_plan_oidc_subjects = ["ref:refs/heads/main"]
+      # nothing that `:pull_request` did not already cost. `environment:pr-plan` is
+      # trusted ahead of plan.yml's tofu-plan job moving into that repo's pr-plan Environment.
+      extra_plan_oidc_subjects = ["ref:refs/heads/main", "environment:pr-plan"]
     }
   }
 
