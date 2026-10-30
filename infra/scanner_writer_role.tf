@@ -2,9 +2,9 @@
 # BOUNTY-SCANNER S3 WRITER ROLE
 # ==============================================================================
 # bounty-infra's SE sprint (BI-D5, sprints/SE_egress_migration): the per-scan
-# Vultr VM's ONLY credential. run-scan.yml assumes this via ROLE CHAINING from
-# its existing github-actions-bounty-infra identity -- not a new OIDC subject,
-# not a widened trust condition -- then narrows it further with an inline
+# Vultr VM's ONLY credential. This role has no OIDC trust of its own: run-scan.yml
+# assumes it via ROLE CHAINING from github-actions-bounty-infra, then narrows it
+# further with an inline
 # session policy scoped to that one scan's domain/program/run_id before the
 # credential ever reaches the VM (via cloud-init user-data). This role's own
 # permissions are only the OUTER bound that session policy can narrow, never

@@ -86,8 +86,10 @@ variable "projects" {
     "bounty-infra" = {
       repo_name = "bounty-infra"
       plan_role = true
-      # deploy-infra.yml's apply job runs `environment: production`.
-      extra_oidc_subjects = ["environment:production"]
+      # deploy-infra.yml's apply job runs `environment: production`; run-scan.yml's
+      # execute-scan job runs `environment: scan`, a required-reviewer Environment
+      # limited to main (GB-D8).
+      extra_oidc_subjects = ["environment:production", "environment:scan"]
       # plan-infra.yml's credentialed plan job runs behind `environment: infra-plan`, a
       # required-reviewer Environment (bounty-infra #179, BI-D23), so this is the only
       # subject the plan role trusts. ":pull_request" is dropped: a PR's run uses the PR's
