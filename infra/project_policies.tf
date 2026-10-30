@@ -15,7 +15,10 @@
 #   reads/writes bounty-infra's state -- that is pipeline_state_policy (main.tf),
 #   not this policy;
 # - run-scan.yml reads tofu outputs from the same state, then chains into
-#   bounty-scanner-s3-writer -- the one statement below.
+#   bounty-scanner-s3-writer -- the first statement below;
+# - both workflows read their secrets from /bounty-infra/ in SSM Parameter Store
+#   (bounty_infra_secrets.tf, GB-D8) -- the last two statements. The plan role
+#   holds neither: its plan runs with a placeholder Vultr key.
 # Do not re-add an AWS resource grant here without an AWS resource in infra/ to
 # justify it: that would be reintroducing exactly what SE retired (BI-D5).
 resource "aws_iam_policy" "bounty_infra_policy" {
@@ -38,6 +41,28 @@ resource "aws_iam_policy" "bounty_infra_policy" {
         Effect   = "Allow"
         Action   = "sts:AssumeRole"
         Resource = aws_iam_role.bounty_scanner_s3_writer.arn
+      },
+      {
+        # Only this project's own path. No other CI role in the account holds an ssm:Get*
+        # grant that covers it, which is what keeps these values to this role (GB-D8).
+        Sid      = "ReadOwnParameters"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/bounty-infra/*"
+      },
+      {
+        # The parameters use the AWS-managed aws/ssm key. Decrypt only through SSM, so this
+        # grant cannot be used on the key directly. A Resource takes the key ARN, not the
+        # alias, hence target_key_arn.
+        Sid      = "DecryptViaSsmOnly"
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = data.aws_kms_alias.ssm.target_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "ssm.${var.aws_region}.amazonaws.com"
+          }
+        }
       }
     ]
   })

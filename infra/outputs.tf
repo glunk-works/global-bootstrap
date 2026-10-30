@@ -34,6 +34,6 @@ output "state_kms_key_arn" {
 }
 
 output "bounty_scanner_s3_writer_role_arn" {
-  description = "ARN of the chain-only S3 writer role for bounty-infra's per-scan Vultr VM (SE, BI-D5). Export as AWS_SCANNER_WRITER_ROLE_ARN in bounty-infra's Infisical secret store."
+  description = "ARN of the chain-only S3 writer role for bounty-infra's per-scan Vultr VM (SE, BI-D5). Store as the AWS_SCANNER_WRITER_ROLE_ARN secret of bounty-infra's scan Environment."
   value       = aws_iam_role.bounty_scanner_s3_writer.arn
 }
