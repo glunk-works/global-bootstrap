@@ -121,8 +121,11 @@ variable "projects" {
       # --jq '.id, .owner.id'`. Not BR-D4 restricted: a public org name, a public repo name,
       # and two GitHub numeric ids.
       oidc_subject_prefix = "repo:glunk-works@295891085/bedrock-serverless-rag@1253604712"
-      # deploy.yml's apply job runs `environment: production` (S1a-T5).
+      # deploy.yml's apply job runs `environment: production` (S1a-T5), and so does
+      # destroy-ai-lab; tofu-plan-main uses the plan role. Nothing assumes the apply role
+      # outside `production`, so the branch subject is not trusted (GB-D9).
       extra_oidc_subjects = ["environment:production"]
+      apply_trusts_main   = false
       # `ref:refs/heads/main` is deploy.yml's push-triggered tofu-plan-main; without it that
       # job cannot assume the plan role at all (F56 gap a). `environment:pr-plan` is plan.yml's
       # tofu-plan job, which runs behind `environment: pr-plan`, a required-reviewer
